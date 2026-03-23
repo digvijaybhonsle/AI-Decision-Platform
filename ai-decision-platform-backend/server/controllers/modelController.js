@@ -2,6 +2,7 @@ const axios = require("axios");
 const Model = require("../models/Model");
 const Dataset = require("../models/Dataset");
 
+//  TRAIN MODEL API
 exports.trainModel = async (req, res) => {
   try {
 
@@ -27,17 +28,17 @@ exports.trainModel = async (req, res) => {
     const response = await axios.post(
       `${process.env.ML_API_URL}/train`,
       {
-        filePath: dataset.filePath,   // IMPORTANT
+        filePath: dataset.filePath,
         model_type,
         features,
         target
       }
     );
 
-    // ✅ Extract accuracy (if ML returns it)
+    // ✅ Extract accuracy
     const accuracy = response.data.accuracy || null;
 
-    // ✅ Save model in DB
+    // ✅ Save model
     const model = new Model({
       datasetId,
       modelType: model_type,
@@ -58,6 +59,39 @@ exports.trainModel = async (req, res) => {
 
     res.status(500).json({
       message: "ML service error"
+    });
+
+  }
+};
+
+
+
+// 🔥 GET MODEL BY DATASET API
+exports.getModelByDataset = async (req, res) => {
+  try {
+
+    const { datasetId } = req.params;
+
+    // ✅ Find model
+    const model = await Model.findOne({ datasetId });
+
+    if (!model) {
+      return res.status(404).json({
+        message: "Model not found"
+      });
+    }
+
+    res.status(200).json({
+      message: "Model fetched successfully",
+      model
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      message: "Server error"
     });
 
   }

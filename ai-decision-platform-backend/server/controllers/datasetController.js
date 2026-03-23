@@ -1,12 +1,17 @@
 const Dataset = require("../models/Dataset");
 const csv = require("csv-parser");
 const fs = require("fs");
+const path = require("path");
 
 exports.uploadDataset = async (req, res) => {
   try {
+
     if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
+      return res.status(400).json({
+        message: "No file uploaded"
+      });
     }
+
     const filePath = req.file.path;
 
     let columns = [];
@@ -21,21 +26,41 @@ exports.uploadDataset = async (req, res) => {
         rows++;
       })
       .on("end", async () => {
+
         const dataset = new Dataset({
           userId: req.user,
           datasetName: req.file.originalname,
           columns,
           rows,
-          filePath,
+          filePath: req.file.filename
         });
+
         await dataset.save();
-        res
-          .status(201)
-          .json({ message: "Dataset uploaded successfully", dataset });
+
+        res.status(201).json({
+          message: "Dataset uploaded successfully",
+          datasetId: dataset._id,
+          filename: dataset.datasetName,
+          columns,
+          rows
+        });
+
+      })
+      .on("error", (error) => {
+        console.error(error);
+        res.status(500).json({
+          message: "Error processing CSV file"
+        });
       });
+
   } catch (error) {
+
     console.error(error);
-    res.status(500).json({ message: "Server error" });
+
+    res.status(500).json({
+      message: "Server error"
+    });
+
   }
 };
 

@@ -6,12 +6,26 @@ const insightSchema = new mongoose.Schema({
     ref: "Dataset",
     required: true
   },
-  insightText: {
-    type: String
+
+  summary: {
+    type: Object
   },
-  recommendation: {
-    type: String
+
+  trend: [
+    {
+      Income: Number,
+      Total_Spending: Number
+    }
+  ],
+
+  distribution: {
+    type: Object
   },
+
+  recommendations: [
+    String
+  ],
+
   createdAt: {
     type: Date,
     default: Date.now

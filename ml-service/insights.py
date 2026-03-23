@@ -1,7 +1,13 @@
 import pandas as pd
+import os
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DATASET_PATH = os.path.join(BASE_DIR, "datasets")
+MODEL_PATH = os.path.join(BASE_DIR, "models")
 
 def generate_insights():
-    df = pd.read_excel("datasets/marketing_campaign.xlsx")
+    df = pd.read_excel(os.path.join(DATASET_PATH, "marketing_campaign.xlsx"))
     df.columns = df.columns.str.strip()
     df = df.dropna()
 

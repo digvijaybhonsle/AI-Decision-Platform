@@ -11,6 +11,11 @@ from train_model import train_model
 from typing import List
 from typing import Dict
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DATASET_PATH = os.path.join(BASE_DIR, "datasets")
+MODEL_PATH = os.path.join(BASE_DIR, "models")
+
 app = FastAPI()
 
 # ==============================
@@ -45,7 +50,7 @@ class TrainRequest(BaseModel):
 def upload_dataset(file: UploadFile = File(...)):
     global current_dataset
 
-    file_path = f"datasets/{file.filename}"
+    file_path = os.path.join(DATASET_PATH, file.filename)
 
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)

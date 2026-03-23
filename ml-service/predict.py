@@ -1,7 +1,14 @@
 import joblib
 import numpy as np
 
-model = joblib.load("models/random_forest.pkl")
+import os 
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DATASET_PATH = os.path.join(BASE_DIR, "datasets")
+MODEL_PATH = os.path.join(BASE_DIR, "models")
+
+model = joblib.load(os.path.join(MODEL_PATH, "model.pkl"))
 
 def predict_with_confidence(data):
     tree_predictions = np.array([

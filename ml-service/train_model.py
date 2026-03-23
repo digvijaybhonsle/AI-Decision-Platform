@@ -7,9 +7,15 @@ import joblib
 
 from preprocessing import preprocess_data
 
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DATASET_PATH = os.path.join(BASE_DIR, "datasets")
+MODEL_PATH = os.path.join(BASE_DIR, "models")
+
 
 def train_model(model_type="random_forest"):
-    df = pd.read_excel("datasets/marketing_campaign.xlsx")
+    df = pd.read_excel(os.path.join(DATASET_PATH, "marketing_campaign.xlsx"))
     df = preprocess_data(df)
 
     X = df[['Income', 'Kidhome', 'Teenhome', 'Recency']]
@@ -37,7 +43,7 @@ def train_model(model_type="random_forest"):
     mse = mean_squared_error(y_test, y_pred)
 
     # Save model
-    joblib.dump(model, "models/model.pkl")
+    joblib.dump(model, os.path.join(MODEL_PATH, "model.pkl"))
 
     return {
         "model_type": model_type,

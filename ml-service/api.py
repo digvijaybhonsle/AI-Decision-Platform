@@ -102,6 +102,7 @@ async def train(
     global model, current_model_file
 
     try:
+        # Convert features from JSON string to list
         features = json.loads(features)
 
         # Read uploaded file
@@ -115,17 +116,20 @@ async def train(
         df.columns = df.columns.str.strip()
         df = df.dropna()
 
-        # Train model
+        # Train model using reusable function
         result = train_model(df, model_type, features, target)
         if "error" in result:
             return result
 
-        # Save model + metadata for consistent loading later
+        # Ensure model directory exists
+        os.makedirs(MODEL_PATH, exist_ok=True)
+
+        # Save model + metadata (model object + features)
         model_filename = f"{model_type}_{target}_{int(pd.Timestamp.now().timestamp())}.pkl"
         model_file_path = os.path.join(MODEL_PATH, model_filename)
         joblib.dump({"model": result["model_obj"], "features": features}, model_file_path)
 
-        # Load into memory
+        # Load into memory for immediate use
         model = result["model_obj"]
         current_model_file = model_file_path
 
@@ -134,27 +138,35 @@ async def train(
     except Exception as e:
         return {"error": str(e)}
 
-# ==============================
-# STEP 4: PREDICT
-# ==============================
+
 @app.post("/predict")
 def predict(data: Dict[str, float]):
-    global model, current_model_file
-    if model is None or current_model_file is None:
-        return {"error": "Model not trained yet"}
+    global current_model_file
 
-    loaded = joblib.load(current_model_file)
-    model_obj = loaded["model"]
-    features = loaded["features"]
+    try:
+        if current_model_file is None:
+            return {"error": "No model trained yet"}
 
-    if not all(f in data for f in features):
-        return {"error": f"Missing required features. Expected: {features}"}
+        # Load the latest trained model
+        loaded = joblib.load(current_model_file)
+        model_obj = loaded["model"]
+        features = loaded["features"]
 
-    values = [data[f] for f in features]
-    prediction = model_obj.predict([values])[0]
+        # Validate input features
+        missing = [f for f in features if f not in data]
+        if missing:
+            return {"error": f"Missing required features: {missing}"}
 
-    return {"prediction": float(prediction)}
+        # Prepare input values
+        values = [data[f] for f in features]
 
+        # Make prediction
+        prediction = model_obj.predict([values])[0]
+
+        return {"prediction": float(prediction)}
+
+    except Exception as e:
+        return {"error": str(e)}
 
 # ==============================
 # STEP 5: SIMULATE

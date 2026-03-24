@@ -96,16 +96,16 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 async def train(
     file: UploadFile = File(...),
     model_type: str = Form(...),
-    features: str = Form(...),
-    target: str = Form(...)
+    features: str = Form(None),
+    target: str = Form(None)
 ):
     global model, current_model_file
 
     try:
-        # Convert features from JSON string to list
-        features = json.loads(features)
+        # Parse features if provided
+        features = json.loads(features) if features else None
 
-        # Read uploaded file
+        # Read dataset
         if file.filename.endswith(".csv"):
             df = pd.read_csv(file.file)
         elif file.filename.endswith(".xlsx"):
@@ -116,20 +116,17 @@ async def train(
         df.columns = df.columns.str.strip()
         df = df.dropna()
 
-        # Train model using reusable function
+        # Train model
         result = train_model(df, model_type, features, target)
         if "error" in result:
             return result
 
-        # Ensure model directory exists
-        os.makedirs(MODEL_PATH, exist_ok=True)
-
-        # Save model + metadata (model object + features)
-        model_filename = f"{model_type}_{target}_{int(pd.Timestamp.now().timestamp())}.pkl"
+        # Save model for future use
+        model_filename = f"{model_type}_{result['target']}_{int(pd.Timestamp.now().timestamp())}.pkl"
         model_file_path = os.path.join(MODEL_PATH, model_filename)
-        joblib.dump({"model": result["model_obj"], "features": features}, model_file_path)
+        joblib.dump({"model": result["model_obj"], "features": result["features"]}, model_file_path)
 
-        # Load into memory for immediate use
+        # Load into memory
         model = result["model_obj"]
         current_model_file = model_file_path
 

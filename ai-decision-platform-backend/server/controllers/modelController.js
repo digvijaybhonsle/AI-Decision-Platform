@@ -8,7 +8,20 @@ const path = require("path");
 // 🚀 TRAIN MODEL API
 exports.trainModel = async (req, res) => {
   try {
-    const { datasetId, model_type, features, target } = req.body;
+    let { datasetId, model_type, features, target } = req.body;
+
+    console.log("RAW BODY:", req.body);
+
+    // ✅ FIX: convert string → array
+    if (typeof features === "string") {
+      try {
+        features = JSON.parse(features);
+      } catch (err) {
+        return res.status(400).json({
+          message: "Invalid features format"
+        });
+      }
+    }
 
     // ✅ Validate input
     if (!datasetId || !model_type || !features || !target) {
@@ -24,7 +37,6 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // ✅ Find dataset
     const dataset = await Dataset.findById(datasetId);
 
     if (!dataset) {
@@ -33,17 +45,17 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // ✅ FIXED PATH (IMPORTANT 🔥)
+    // ✅ Correct path
     const fullPath = path.join(__dirname, "..", "uploads", dataset.filePath);
 
-    // ✅ Check file exists
+    console.log("FILE PATH:", fullPath);
+
     if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
         message: "Dataset file not found on server"
       });
     }
 
-    // ✅ Prevent duplicate model training
     const existing = await Model.findOne({ datasetId, modelType: model_type });
 
     if (existing) {
@@ -52,15 +64,13 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // ✅ Create FormData
     const formData = new FormData();
 
     formData.append("file", fs.createReadStream(fullPath));
     formData.append("model_type", model_type);
-    formData.append("features", JSON.stringify(features));
+    formData.append("features", JSON.stringify(features)); // ✅ always string here
     formData.append("target", target);
 
-    // ✅ Call ML API
     const response = await axios.post(
       `${process.env.ML_API_URL}/train`,
       formData,
@@ -74,7 +84,6 @@ exports.trainModel = async (req, res) => {
       }
     );
 
-    // ❌ Handle ML errors properly
     if (response.data?.error) {
       return res.status(400).json({
         message: "ML error",
@@ -82,13 +91,11 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // ✅ Extract accuracy
     const accuracy =
       response.data?.accuracy ??
       response.data?.r2_score ??
       null;
 
-    // ✅ Save model
     const model = new Model({
       datasetId,
       modelType: model_type,

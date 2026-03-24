@@ -99,12 +99,12 @@ async def train(
     features: str = Form(...),
     target: str = Form(...)
 ):
-    global model
+    global model, current_model_file
 
     try:
         features = json.loads(features)
 
-        # ✅ Read file
+        # Read uploaded file
         if file.filename.endswith(".csv"):
             df = pd.read_csv(file.file)
         elif file.filename.endswith(".xlsx"):
@@ -115,130 +115,99 @@ async def train(
         df.columns = df.columns.str.strip()
         df = df.dropna()
 
-        # ✅ Use your reusable function
+        # Train model
         result = train_model(df, model_type, features, target)
-
         if "error" in result:
             return result
 
-        # ✅ Load saved model into memory
-        loaded_model = joblib.load(result["model_path"])
-        model = loaded_model
+        # Save model + metadata for consistent loading later
+        model_filename = f"{model_type}_{target}_{int(pd.Timestamp.now().timestamp())}.pkl"
+        model_file_path = os.path.join(MODEL_PATH, model_filename)
+        joblib.dump({"model": result["model_obj"], "features": features}, model_file_path)
 
-        return result
+        # Load into memory
+        model = result["model_obj"]
+        current_model_file = model_file_path
+
+        return {**result, "model_file": model_file_path}
 
     except Exception as e:
         return {"error": str(e)}
 
-
 # ==============================
-# 🏅 STEP 4: PREDICT
+# STEP 4: PREDICT
 # ==============================
-
 @app.post("/predict")
 def predict(data: Dict[str, float]):
-    try:
-        # ✅ Load model safely
-        loaded = joblib.load("models/model.pkl")
-    except:
+    global model, current_model_file
+    if model is None or current_model_file is None:
         return {"error": "Model not trained yet"}
 
+    loaded = joblib.load(current_model_file)
     model_obj = loaded["model"]
     features = loaded["features"]
 
-    # ✅ Validate input features
     if not all(f in data for f in features):
-        return {
-            "error": f"Missing required features. Expected: {features}"
-        }
+        return {"error": f"Missing required features. Expected: {features}"}
 
-    try:
-        values = [data[f] for f in features]
-    except KeyError:
-        return {
-            "error": f"Missing required features: {features}"
-        }
-
-    # ✅ Prediction
+    values = [data[f] for f in features]
     prediction = model_obj.predict([values])[0]
 
-    return {
-        "prediction": float(prediction)
-    }
+    return {"prediction": float(prediction)}
 
 
 # ==============================
-# 🏆 STEP 5: SIMULATE
+# STEP 5: SIMULATE
 # ==============================
-
 @app.post("/simulate")
-def simulate(requests: list[dict]):
-    loaded = joblib.load("models/model.pkl")
+def simulate(requests: List[Dict[str, float]]):
+    global model, current_model_file
+    if model is None or current_model_file is None:
+        return {"error": "Model not trained yet"}
 
+    loaded = joblib.load(current_model_file)
     model_obj = loaded["model"]
     features = loaded["features"]
 
     results = []
-
     for req in requests:
         if not all(f in req for f in features):
-            return {
-                "error": f"Each input must contain features: {features}"
-            }
+            return {"error": f"Each input must contain features: {features}"}
         values = [req[f] for f in features]
         pred = model_obj.predict([values])[0]
-
-        results.append({
-            "input": req,
-            "prediction": float(pred)
-        })
+        results.append({"input": req, "prediction": float(pred)})
 
     return results
 
 
 # ==============================
-# 🎯 STEP 6: INSIGHTS
+# STEP 6: INSIGHTS
 # ==============================
-
 @app.get("/insights")
 def insights():
     if current_dataset is None:
         return {"error": "No dataset available"}
-
     return generate_insights()
 
 
 # ==============================
-# 📊 EXTRA: FEATURE IMPORTANCE
+# EXTRA: FEATURE IMPORTANCE
 # ==============================
-
 @app.get("/feature-importance")
 def feature_importance():
-    if model is None:
+    global model, current_model_file
+    if model is None or current_model_file is None:
         return {"error": "Model not trained yet"}
 
-    try:
-        loaded = joblib.load("models/model.pkl")
-        model_obj = loaded["model"]
-        features = loaded["features"]
-    except:
-        return {"error": "Model file not found"}
+    loaded = joblib.load(current_model_file)
+    model_obj = loaded["model"]
+    features = loaded["features"]
 
-    # Some models (like Linear Regression) may not have feature_importances_
     if not hasattr(model_obj, "feature_importances_"):
-        return {
-            "error": "Feature importance not available for this model"
-        }
+        return {"error": "Feature importance not available for this model"}
 
     importances = model_obj.feature_importances_
-
-    # Convert to clean JSON
-    result = [
-        {"feature": f, "importance": float(i)}
-        for f, i in zip(features, importances)
-    ]
-    result = sorted(result, key=lambda x: x["importance"], reverse=True)
-
-    return result
+    result = [{"feature": f, "importance": float(i)} for f, i in zip(features, importances)]
+    return sorted(result, key=lambda x: x["importance"], reverse=True)
 
 

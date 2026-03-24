@@ -1,3 +1,5 @@
+import traceback
+
 from fastapi import FastAPI, UploadFile, File, Form
 from pydantic import BaseModel
 import joblib
@@ -9,7 +11,7 @@ import json
 from predict import predict_with_confidence
 from insights import generate_insights
 from train_model import train_model
-from typing import List
+from typing import List, Optional
 from typing import Dict
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -38,102 +40,80 @@ current_dataset = None
 
 
 class TrainRequest(BaseModel):
+    datasetId: str
     model_type: str
-    features: List[str]
-    target: str
-
-
-# ==============================
-# 🥇 STEP 1: UPLOAD DATASET
-# ==============================
-
-@app.post("/upload-dataset")
-def upload_dataset(file: UploadFile = File(...)):
-    global current_dataset
-
-    file_path = os.path.join(DATASET_PATH, file.filename)
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    current_dataset = file.filename
-
-    return {
-        "message": "Dataset uploaded successfully",
-        "filename": file.filename
-    }
-
-
-# ==============================
-# 🥈 STEP 2: PREVIEW DATASET
-# ==============================
-
-@app.get("/dataset-preview")
-def dataset_preview():
-    if current_dataset is None:
-        return {"error": "No dataset uploaded"}
-
-    path = f"datasets/{current_dataset}"
-
-    if current_dataset.endswith(".xlsx"):
-        df = pd.read_excel(path)
-    else:
-        df = pd.read_csv(path)
-
-    df.columns = df.columns.str.strip()
-
-    return {
-        "columns": list(df.columns),
-        "rows": df.head(10).to_dict(orient="records")
-    }
+    features: Optional[List[str]] = None
+    target: Optional[str] = None
 
 
 MODEL_DIR = "models"
+DATASET_DIR = "datasets"
+
 os.makedirs(MODEL_DIR, exist_ok=True)
+os.makedirs(DATASET_DIR, exist_ok=True)
+
+model = None
+current_model_file = None
 
 
 @app.post("/train")
-async def train(
-    file: UploadFile = File(...),
-    model_type: str = Form(...),
-    features: str = Form(None),
-    target: str = Form(None)
-):
+async def train(req: TrainRequest):
     global model, current_model_file
 
     try:
-        # Parse features if provided
-        features = json.loads(features) if features else None
+        # 📂 Load dataset using datasetId
+        dataset_path = os.path.join(DATASET_DIR, f"{req.datasetId}.csv")
 
-        # Read dataset
-        if file.filename.endswith(".csv"):
-            df = pd.read_csv(file.file)
-        elif file.filename.endswith(".xlsx"):
-            df = pd.read_excel(file.file)
-        else:
-            return {"error": "Unsupported file format"}
+        if not os.path.exists(dataset_path):
+            return {"error": f"Dataset not found: {req.datasetId}"}
 
+        df = pd.read_csv(dataset_path)
+
+        # 🧹 Clean columns
         df.columns = df.columns.str.strip()
-        df = df.dropna()
 
-        # Train model
-        result = train_model(df, model_type, features, target)
+        # 🚀 Train model
+        result = train_model(
+            df,
+            req.model_type,
+            req.features,
+            req.target
+        )
+
         if "error" in result:
             return result
 
-        # Save model for future use
-        model_filename = f"{model_type}_{result['target']}_{int(pd.Timestamp.now().timestamp())}.pkl"
-        model_file_path = os.path.join(MODEL_PATH, model_filename)
-        joblib.dump({"model": result["model_obj"], "features": result["features"]}, model_file_path)
+        # 💾 Save model (ONLY ONCE)
+        model_filename = f"{req.model_type}_{result['target']}_{int(pd.Timestamp.now().timestamp())}.pkl"
+        model_file_path = os.path.join(MODEL_DIR, model_filename)
 
-        # Load into memory
+        joblib.dump({
+            "model": result["model_obj"],
+            "features": result["features"]
+        }, model_file_path)
+
+        # 🔥 Load into memory
         model = result["model_obj"]
         current_model_file = model_file_path
 
-        return {**result, "model_file": model_file_path}
+        return {
+            "status": "success",
+            "model_type": req.model_type,
+            "target": result["target"],
+            "features": result["features"],
+            "metrics": {
+                "r2_score": result.get("r2_score"),
+                "mse": result.get("mse"),
+                "accuracy": result.get("accuracy")
+            },
+            "model_file": model_file_path
+        }
 
     except Exception as e:
-        return {"error": str(e)}
+        return {
+            "error": str(e),
+            "trace": traceback.format_exc()
+        }
 
 
 @app.post("/predict")

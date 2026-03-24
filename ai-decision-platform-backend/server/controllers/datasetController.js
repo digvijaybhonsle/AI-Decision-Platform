@@ -30,7 +30,7 @@ exports.uploadDataset = async (req, res) => {
           datasetName: req.file.originalname,
           columns,
           rows,
-          filePath: req.file.filename,
+          filePath: path.resolve(req.file.path),
         });
 
         await dataset.save();

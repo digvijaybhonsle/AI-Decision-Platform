@@ -12,31 +12,31 @@ exports.trainModel = async (req, res) => {
 
     console.log("RAW BODY:", req.body);
 
-    // ✅ FIX: convert string → array
+    // ✅ FIX: string → array
     if (typeof features === "string") {
       try {
         features = JSON.parse(features);
-      } catch (err) {
+      } catch {
         return res.status(400).json({
           message: "Invalid features format"
         });
       }
     }
 
-    // ✅ Validate input
+    // ✅ Validate
     if (!datasetId || !model_type || !features || !target) {
       return res.status(400).json({
         message: "All fields are required"
       });
     }
 
-    // ✅ Validate features array
     if (!Array.isArray(features) || features.length === 0) {
       return res.status(400).json({
         message: "Features must be a non-empty array"
       });
     }
 
+    // ✅ Get dataset
     const dataset = await Dataset.findById(datasetId);
 
     if (!dataset) {
@@ -45,10 +45,15 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // ✅ Correct path
-    const fullPath = path.join(__dirname, "..", "uploads", dataset.filePath);
+    const fullPath = path.resolve(
+      __dirname,
+      "../uploads",
+      dataset.filePath
+    );
 
-    console.log("FILE PATH:", fullPath);
+    console.log("DATASET PATH FROM DB:", dataset.filePath);
+    console.log("FULL PATH:", fullPath);
+    console.log("FILE EXISTS:", fs.existsSync(fullPath));
 
     if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
@@ -56,7 +61,11 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    const existing = await Model.findOne({ datasetId, modelType: model_type });
+    // ✅ Prevent duplicate
+    const existing = await Model.findOne({
+      datasetId,
+      modelType: model_type
+    });
 
     if (existing) {
       return res.status(400).json({
@@ -64,25 +73,28 @@ exports.trainModel = async (req, res) => {
       });
     }
 
+    // ✅ FormData
     const formData = new FormData();
 
     formData.append("file", fs.createReadStream(fullPath));
     formData.append("model_type", model_type);
-    formData.append("features", JSON.stringify(features)); // ✅ always string here
+    formData.append("features", JSON.stringify(features));
     formData.append("target", target);
+
+    console.log("Sending request to ML API...");
 
     const response = await axios.post(
       `${process.env.ML_API_URL}/train`,
       formData,
       {
-        headers: {
-          ...formData.getHeaders()
-        },
+        headers: formData.getHeaders(),
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
         timeout: 60000
       }
     );
+
+    console.log("ML RESPONSE:", response.data);
 
     if (response.data?.error) {
       return res.status(400).json({
@@ -127,7 +139,7 @@ exports.trainModel = async (req, res) => {
 };
 
 
-// 🔥 GET ALL MODELS BY DATASET
+// 🔥 GET MODELS
 exports.getModelByDataset = async (req, res) => {
   try {
     const { datasetId } = req.params;

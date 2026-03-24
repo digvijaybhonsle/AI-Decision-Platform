@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, Form
 from pydantic import BaseModel
 import joblib
 import shutil
@@ -87,56 +87,70 @@ def dataset_preview():
     }
 
 
-# ==============================
-# 🥉 STEP 3: TRAIN MODEL
-# ==============================
+MODEL_DIR = "models"
+os.makedirs(MODEL_DIR, exist_ok=True)
+
 
 @app.post("/train")
-def train(req: TrainRequest):
-    global model
+async def train(
+    file: UploadFile = File(...),
+    model_type: str = Form(...),
+    features: str = Form(...),
+    target: str = Form(...)
+):
+    try:
+        # ✅ Convert features string → list
+        features = json.loads(features)
 
-    if current_dataset is None:
-        return {"error": "Upload dataset first"}
+        # ✅ Read file directly
+        if file.filename.endswith(".csv"):
+            df = pd.read_csv(file.file)
+        elif file.filename.endswith(".xlsx"):
+            df = pd.read_excel(file.file)
+        else:
+            return {"error": "Unsupported file format"}
 
-    path = f"datasets/{current_dataset}"
+        # ✅ Clean data
+        df.columns = df.columns.str.strip()
+        df = df.dropna()
 
-    # Load dataset
-    if current_dataset.endswith(".xlsx"):
-        df = pd.read_excel(path)
-    else:
-        df = pd.read_csv(path)
+        # ✅ Validate columns
+        for col in features + [target]:
+            if col not in df.columns:
+                return {"error": f"Column '{col}' not found"}
 
-    df.columns = df.columns.str.strip()
-    df = df.dropna()
+        X = df[features]
+        y = df[target]
 
-    X = df[req.features]
-    y = df[req.target]
+        # 🔥 Model selection
+        if model_type == "random_forest":
+            from sklearn.ensemble import RandomForestRegressor
+            model = RandomForestRegressor()
+        elif model_type == "linear":
+            from sklearn.linear_model import LinearRegression
+            model = LinearRegression()
+        else:
+            return {"error": "Invalid model type"}
 
-    # Model selection
-    if req.model_type == "random_forest":
-        from sklearn.ensemble import RandomForestRegressor
-        model_obj = RandomForestRegressor()
-    elif req.model_type == "linear":
-        from sklearn.linear_model import LinearRegression
-        model_obj = LinearRegression()
-    else:
-        return {"error": "Invalid model type"}
+        # ✅ Train
+        model.fit(X, y)
 
-    model_obj.fit(X, y)
+        # ✅ Save model
+        model_path = os.path.join(MODEL_DIR, "model.pkl")
 
-    # Save model + features
-    joblib.dump({
-        "model": model_obj,
-        "features": req.features
-    }, "models/model.pkl")
+        joblib.dump({
+            "model": model,
+            "features": features
+        }, model_path)
 
-    model = model_obj
+        return {
+            "message": "Model trained successfully",
+            "features_used": features,
+            "target": target
+        }
 
-    return {
-        "message": "Model trained successfully",
-        "features_used": req.features,
-        "target": req.target
-    }
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # ==============================

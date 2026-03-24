@@ -1,21 +1,20 @@
 const axios = require("axios");
 const Model = require("../models/Model");
 const Dataset = require("../models/Dataset");
+const fs = require("fs");
+const FormData = require("form-data");
 
 // 🚀 TRAIN MODEL API
 exports.trainModel = async (req, res) => {
   try {
-
     const { datasetId, model_type, features, target } = req.body;
 
-    // ✅ Validate input
     if (!datasetId || !model_type || !features || !target) {
       return res.status(400).json({
         message: "All fields are required"
       });
     }
 
-    // ✅ Find dataset
     const dataset = await Dataset.findById(datasetId);
 
     if (!dataset) {
@@ -24,24 +23,39 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // 🚨 FIX: Don't send filePath
+    // ✅ Check file exists
+    if (!fs.existsSync(dataset.filePath)) {
+      return res.status(400).json({
+        message: "Dataset file not found on server"
+      });
+    }
+
+    // ✅ Create FormData
+    const formData = new FormData();
+
+    formData.append("file", fs.createReadStream(dataset.filePath));
+    formData.append("model_type", model_type);
+    formData.append("features", JSON.stringify(features));
+    formData.append("target", target);
+
     const response = await axios.post(
       `${process.env.ML_API_URL}/train`,
+      formData,
       {
-        datasetName: dataset.datasetName, // send name instead
-        model_type,
-        features,
-        target
-      },
-      {
-        timeout: 15000
+        headers: {
+          ...formData.getHeaders()
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        timeout: 60000
       }
     );
 
-    // ✅ Extract accuracy safely
-    const accuracy = response.data?.accuracy ?? null;
+    const accuracy =
+      response.data?.accuracy ??
+      response.data?.r2_score ??
+      null;
 
-    // ✅ Save model
     const model = new Model({
       datasetId,
       modelType: model_type,
@@ -58,7 +72,11 @@ exports.trainModel = async (req, res) => {
 
   } catch (error) {
 
-    console.error("Train Error:", error.response?.data || error.message);
+    console.error("FULL ERROR:", {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
 
     res.status(500).json({
       message: "ML service error",
@@ -68,24 +86,23 @@ exports.trainModel = async (req, res) => {
   }
 };
 
-
+// 🔥 GET ALL MODELS (FIXED)
 exports.getModelByDataset = async (req, res) => {
   try {
 
     const { datasetId } = req.params;
 
-    // ✅ Find model
-    const model = await Model.findOne({ datasetId });
+    const models = await Model.find({ datasetId });
 
-    if (!model) {
+    if (!models.length) {
       return res.status(404).json({
-        message: "Model not found"
+        message: "No models found"
       });
     }
 
     res.status(200).json({
-      message: "Model fetched successfully",
-      model
+      message: "Models fetched successfully",
+      models
     });
 
   } catch (error) {

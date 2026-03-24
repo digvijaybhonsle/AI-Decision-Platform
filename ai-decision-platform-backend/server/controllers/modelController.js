@@ -3,18 +3,28 @@ const Model = require("../models/Model");
 const Dataset = require("../models/Dataset");
 const fs = require("fs");
 const FormData = require("form-data");
+const path = require("path");
 
 // 🚀 TRAIN MODEL API
 exports.trainModel = async (req, res) => {
   try {
     const { datasetId, model_type, features, target } = req.body;
 
+    // ✅ Validate input
     if (!datasetId || !model_type || !features || !target) {
       return res.status(400).json({
         message: "All fields are required"
       });
     }
 
+    // ✅ Validate features array
+    if (!Array.isArray(features) || features.length === 0) {
+      return res.status(400).json({
+        message: "Features must be a non-empty array"
+      });
+    }
+
+    // ✅ Find dataset
     const dataset = await Dataset.findById(datasetId);
 
     if (!dataset) {
@@ -23,21 +33,34 @@ exports.trainModel = async (req, res) => {
       });
     }
 
+    // ✅ FIXED PATH (IMPORTANT 🔥)
+    const fullPath = path.join(__dirname, "..", "uploads", dataset.filePath);
+
     // ✅ Check file exists
-    if (!fs.existsSync(dataset.filePath)) {
+    if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
         message: "Dataset file not found on server"
+      });
+    }
+
+    // ✅ Prevent duplicate model training
+    const existing = await Model.findOne({ datasetId, modelType: model_type });
+
+    if (existing) {
+      return res.status(400).json({
+        message: "Model already trained for this dataset"
       });
     }
 
     // ✅ Create FormData
     const formData = new FormData();
 
-    formData.append("file", fs.createReadStream(dataset.filePath));
+    formData.append("file", fs.createReadStream(fullPath));
     formData.append("model_type", model_type);
     formData.append("features", JSON.stringify(features));
     formData.append("target", target);
 
+    // ✅ Call ML API
     const response = await axios.post(
       `${process.env.ML_API_URL}/train`,
       formData,
@@ -51,11 +74,21 @@ exports.trainModel = async (req, res) => {
       }
     );
 
+    // ❌ Handle ML errors properly
+    if (response.data?.error) {
+      return res.status(400).json({
+        message: "ML error",
+        error: response.data.error
+      });
+    }
+
+    // ✅ Extract accuracy
     const accuracy =
       response.data?.accuracy ??
       response.data?.r2_score ??
       null;
 
+    // ✅ Save model
     const model = new Model({
       datasetId,
       modelType: model_type,
@@ -86,10 +119,10 @@ exports.trainModel = async (req, res) => {
   }
 };
 
-// 🔥 GET ALL MODELS (FIXED)
+
+// 🔥 GET ALL MODELS BY DATASET
 exports.getModelByDataset = async (req, res) => {
   try {
-
     const { datasetId } = req.params;
 
     const models = await Model.find({ datasetId });

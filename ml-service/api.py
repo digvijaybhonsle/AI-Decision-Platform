@@ -4,6 +4,7 @@ import joblib
 import shutil
 import os
 import pandas as pd
+import json
 
 from predict import predict_with_confidence
 from insights import generate_insights
@@ -98,11 +99,12 @@ async def train(
     features: str = Form(...),
     target: str = Form(...)
 ):
+    global model
+
     try:
-        # ✅ Convert features string → list
         features = json.loads(features)
 
-        # ✅ Read file directly
+        # ✅ Read file
         if file.filename.endswith(".csv"):
             df = pd.read_csv(file.file)
         elif file.filename.endswith(".xlsx"):
@@ -110,44 +112,20 @@ async def train(
         else:
             return {"error": "Unsupported file format"}
 
-        # ✅ Clean data
         df.columns = df.columns.str.strip()
         df = df.dropna()
 
-        # ✅ Validate columns
-        for col in features + [target]:
-            if col not in df.columns:
-                return {"error": f"Column '{col}' not found"}
+        # ✅ Use your reusable function
+        result = train_model(df, model_type, features, target)
 
-        X = df[features]
-        y = df[target]
+        if "error" in result:
+            return result
 
-        # 🔥 Model selection
-        if model_type == "random_forest":
-            from sklearn.ensemble import RandomForestRegressor
-            model = RandomForestRegressor()
-        elif model_type == "linear":
-            from sklearn.linear_model import LinearRegression
-            model = LinearRegression()
-        else:
-            return {"error": "Invalid model type"}
+        # ✅ Load saved model into memory
+        loaded_model = joblib.load(result["model_path"])
+        model = loaded_model
 
-        # ✅ Train
-        model.fit(X, y)
-
-        # ✅ Save model
-        model_path = os.path.join(MODEL_DIR, "model.pkl")
-
-        joblib.dump({
-            "model": model,
-            "features": features
-        }, model_path)
-
-        return {
-            "message": "Model trained successfully",
-            "features_used": features,
-            "target": target
-        }
+        return result
 
     except Exception as e:
         return {"error": str(e)}
@@ -159,14 +137,16 @@ async def train(
 
 @app.post("/predict")
 def predict(data: Dict[str, float]):
-    if model is None:
+    try:
+        # ✅ Load model safely
+        loaded = joblib.load("models/model.pkl")
+    except:
         return {"error": "Model not trained yet"}
-
-    loaded = joblib.load("models/model.pkl")
 
     model_obj = loaded["model"]
     features = loaded["features"]
 
+    # ✅ Validate input features
     if not all(f in data for f in features):
         return {
             "error": f"Missing required features. Expected: {features}"
@@ -175,8 +155,11 @@ def predict(data: Dict[str, float]):
     try:
         values = [data[f] for f in features]
     except KeyError:
-        return {"error": f"Missing required features: {features}"}
+        return {
+            "error": f"Missing required features: {features}"
+        }
 
+    # ✅ Prediction
     prediction = model_obj.predict([values])[0]
 
     return {

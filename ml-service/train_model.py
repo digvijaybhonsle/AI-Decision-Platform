@@ -5,6 +5,7 @@ from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.linear_model import LinearRegression, LogisticRegression
 import joblib
 import os
+import time
 
 from preprocessing import preprocess_data
 
@@ -65,7 +66,7 @@ def train_model(df, model_type, features, target):
         os.makedirs(MODEL_PATH, exist_ok=True)
 
         # ✅ Save model
-        model_filename = f"{model_type}_{target}.pkl"
+        model_filename = f"{model_type}_{target}_{int(time.time())}.pkl"
         model_path = os.path.join(MODEL_PATH, model_filename)
 
         joblib.dump(model, model_path)

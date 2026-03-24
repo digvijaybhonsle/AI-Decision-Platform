@@ -2,7 +2,7 @@ const axios = require("axios");
 const Model = require("../models/Model");
 const Dataset = require("../models/Dataset");
 
-//  TRAIN MODEL API
+// 🚀 TRAIN MODEL API
 exports.trainModel = async (req, res) => {
   try {
 
@@ -24,19 +24,22 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // ✅ Call ML Service
+    // 🚨 FIX: Don't send filePath
     const response = await axios.post(
       `${process.env.ML_API_URL}/train`,
       {
-        filePath: dataset.filePath,
+        datasetName: dataset.datasetName, // send name instead
         model_type,
         features,
         target
+      },
+      {
+        timeout: 15000
       }
     );
 
-    // ✅ Extract accuracy
-    const accuracy = response.data.accuracy || null;
+    // ✅ Extract accuracy safely
+    const accuracy = response.data?.accuracy ?? null;
 
     // ✅ Save model
     const model = new Model({
@@ -55,43 +58,11 @@ exports.trainModel = async (req, res) => {
 
   } catch (error) {
 
-    console.error(error.response?.data || error.message);
+    console.error("Train Error:", error.response?.data || error.message);
 
     res.status(500).json({
-      message: "ML service error"
-    });
-
-  }
-};
-
-
-
-// 🔥 GET MODEL BY DATASET API
-exports.getModelByDataset = async (req, res) => {
-  try {
-
-    const { datasetId } = req.params;
-
-    // ✅ Find model
-    const model = await Model.findOne({ datasetId });
-
-    if (!model) {
-      return res.status(404).json({
-        message: "Model not found"
-      });
-    }
-
-    res.status(200).json({
-      message: "Model fetched successfully",
-      model
-    });
-
-  } catch (error) {
-
-    console.error(error);
-
-    res.status(500).json({
-      message: "Server error"
+      message: "ML service error",
+      error: error.response?.data || error.message
     });
 
   }

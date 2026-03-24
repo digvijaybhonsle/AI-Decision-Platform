@@ -7,7 +7,6 @@ exports.generateInsights = async (req, res) => {
 
     const { datasetId } = req.params;
 
-    // ✅ Find dataset
     const dataset = await Dataset.findById(datasetId);
 
     if (!dataset) {
@@ -16,17 +15,21 @@ exports.generateInsights = async (req, res) => {
       });
     }
 
-    // ✅ Call ML API
+    // 🚨 FIX: Do NOT send filePath
     const response = await axios.post(
       `${process.env.ML_API_URL}/insights`,
       {
-        filePath: dataset.filePath
+        datasetName: dataset.datasetName,
+        columns: dataset.columns,
+        rows: dataset.rows
+      },
+      {
+        timeout: 15000
       }
     );
 
     const mlData = response.data;
 
-    // ✅ Save structured insights
     const insight = new Insight({
       datasetId: dataset._id,
       summary: mlData.summary,
@@ -44,10 +47,11 @@ exports.generateInsights = async (req, res) => {
 
   } catch (error) {
 
-    console.error(error.response?.data || error.message);
+    console.error("Insight Error:", error.response?.data || error.message);
 
     res.status(500).json({
-      message: "ML service error"
+      message: "ML service error",
+      error: error.response?.data || error.message
     });
 
   }

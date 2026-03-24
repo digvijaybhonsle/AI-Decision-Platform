@@ -120,16 +120,29 @@ exports.deleteDatasetById = async (req, res) => {
 
 exports.previewDataset = async (req, res) => {
   try {
+
     const dataset = await Dataset.findById(req.params.id);
 
     if (!dataset) {
-      return res.status(404).json({ message: "Dataset not found" });
+      return res.status(404).json({
+        message: "Dataset not found"
+      });
+    }
+
+    // ✅ FIXED PATH
+    const filePath = path.join(__dirname, "../uploads", dataset.filePath);
+
+    // ✅ Check file exists
+    if (!fs.existsSync(filePath)) {
+      return res.status(400).json({
+        message: "File not found on server"
+      });
     }
 
     const results = [];
     let count = 0;
 
-    fs.createReadStream(dataset.filePath)
+    fs.createReadStream(filePath)
       .pipe(csv())
       .on("data", (data) => {
         if (count < 10) {
@@ -141,14 +154,23 @@ exports.previewDataset = async (req, res) => {
         res.status(200).json({
           datasetName: dataset.datasetName,
           columns: dataset.columns,
-          previewRows: results,
+          previewRows: results
+        });
+      })
+      .on("error", (error) => {
+        console.error(error);
+        res.status(500).json({
+          message: "Error reading file"
         });
       });
+
   } catch (error) {
+
     console.error(error);
 
     res.status(500).json({
-      message: "Server error",
+      message: "Server error"
     });
+
   }
 };

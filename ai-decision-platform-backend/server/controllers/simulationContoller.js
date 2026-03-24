@@ -6,34 +6,34 @@ exports.runSimulation = async (req, res) => {
 
     const inputArray = req.body;
 
-    // ✅ Validate input (must be array)
     if (!Array.isArray(inputArray) || inputArray.length === 0) {
       return res.status(400).json({
         message: "Input must be a non-empty array"
       });
     }
 
-    // ✅ Call ML API (batch input)
     const response = await axios.post(
       `${process.env.ML_API_URL}/simulate`,
-      inputArray
+      inputArray,
+      { timeout: 15000 }
     );
 
     const results = response.data;
 
-    // ✅ Save each simulation in DB
-    const savedSimulations = [];
-
-    for (let item of results) {
-
-      const simulation = new Simulation({
-        inputValues: item.input,
-        predictedRevenue: item.prediction
+    // ✅ Validate ML response
+    if (!Array.isArray(results)) {
+      return res.status(500).json({
+        message: "Invalid response from ML service"
       });
-
-      await simulation.save();
-      savedSimulations.push(simulation);
     }
+
+    // ✅ Bulk insert (FASTER)
+    const simulationsToSave = results.map(item => ({
+      inputValues: item.input,
+      predictedRevenue: item.prediction
+    }));
+
+    const savedSimulations = await Simulation.insertMany(simulationsToSave);
 
     res.status(200).json({
       message: "Simulation completed",
@@ -43,10 +43,11 @@ exports.runSimulation = async (req, res) => {
 
   } catch (error) {
 
-    console.error(error.response?.data || error.message);
+    console.error("Simulation Error:", error.response?.data || error.message);
 
     res.status(500).json({
-      message: "ML service error"
+      message: "ML service error",
+      error: error.response?.data || error.message
     });
 
   }

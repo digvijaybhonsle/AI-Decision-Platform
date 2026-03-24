@@ -68,71 +68,32 @@ exports.trainModel = async (req, res) => {
   }
 };
 
-const axios = require("axios");
-const Model = require("../models/Model");
-const Dataset = require("../models/Dataset");
 
-// 🚀 TRAIN MODEL API
-exports.trainModel = async (req, res) => {
+exports.getModelByDataset = async (req, res) => {
   try {
 
-    const { datasetId, model_type, features, target } = req.body;
+    const { datasetId } = req.params;
 
-    // ✅ Validate input
-    if (!datasetId || !model_type || !features || !target) {
-      return res.status(400).json({
-        message: "All fields are required"
-      });
-    }
+    // ✅ Find model
+    const model = await Model.findOne({ datasetId });
 
-    // ✅ Find dataset
-    const dataset = await Dataset.findById(datasetId);
-
-    if (!dataset) {
+    if (!model) {
       return res.status(404).json({
-        message: "Dataset not found"
+        message: "Model not found"
       });
     }
 
-    // 🚨 FIX: Don't send filePath
-    const response = await axios.post(
-      `${process.env.ML_API_URL}/train`,
-      {
-        datasetName: dataset.datasetName, // send name instead
-        model_type,
-        features,
-        target
-      },
-      {
-        timeout: 15000
-      }
-    );
-
-    // ✅ Extract accuracy safely
-    const accuracy = response.data?.accuracy ?? null;
-
-    // ✅ Save model
-    const model = new Model({
-      datasetId,
-      modelType: model_type,
-      accuracy
-    });
-
-    await model.save();
-
-    res.status(201).json({
-      message: "Model trained successfully",
-      model,
-      mlResponse: response.data
+    res.status(200).json({
+      message: "Model fetched successfully",
+      model
     });
 
   } catch (error) {
 
-    console.error("Train Error:", error.response?.data || error.message);
+    console.error("Get Model Error:", error);
 
     res.status(500).json({
-      message: "ML service error",
-      error: error.response?.data || error.message
+      message: "Server error"
     });
 
   }

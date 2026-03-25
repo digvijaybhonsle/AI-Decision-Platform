@@ -87,7 +87,9 @@ exports.trainModel = async (req, res) => {
     // ============================
     const formData = new FormData();
 
-    formData.append("file", fs.createReadStream(fullPath), {
+    const fileBuffer = fs.readFileSync(fullPath);
+
+    formData.append("file", fileBuffer, {
       filename: path.basename(fullPath),
       contentType: "text/csv",
     });
@@ -109,7 +111,7 @@ exports.trainModel = async (req, res) => {
       headers: formData.getHeaders(),
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
-      timeout: 180000,
+      timeout: 300000,
     });
 
     console.log("✅ ML RESPONSE:", response.data);

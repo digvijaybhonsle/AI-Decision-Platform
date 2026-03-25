@@ -12,6 +12,8 @@ from insights import generate_insights
 from train_model import train_model
 from typing import List
 from typing import Dict
+from fastapi.middleware.cors import CORSMiddleware
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -19,6 +21,14 @@ DATASET_PATH = os.path.join(BASE_DIR, "datasets")
 MODEL_PATH = os.path.join(BASE_DIR, "models")
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # ==============================
 # 🧠 GLOBAL STATE

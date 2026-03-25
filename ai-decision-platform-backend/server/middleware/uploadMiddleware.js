@@ -2,36 +2,80 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 
-// ✅ Define upload folder properly
+// 📁 Upload folder
 const uploadPath = path.join(__dirname, "../uploads");
 
-// ✅ Create folder if not exists (IMPORTANT for Render)
+// ✅ Ensure folder exists (important for deployment)
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
 }
 
-// ✅ Multer storage config
+// ==============================
+// 🧠 STORAGE CONFIG (for file upload routes)
+// ==============================
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
-    cb(null, Date.now() + "-" + file.originalname);
+    const uniqueName = Date.now() + "-" + file.originalname;
+    cb(null, uniqueName);
   }
 });
 
-// ✅ File filter (optional but good)
+// ==============================
+// 📄 FILE FILTER (CSV only)
+// ==============================
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype === "text/csv") {
+  if (
+    file.mimetype === "text/csv" ||
+    file.originalname.endsWith(".csv")
+  ) {
     cb(null, true);
   } else {
-    cb(new Error("Only CSV files allowed"), false);
+    cb(new Error("Only CSV files are allowed"), false);
   }
 };
 
-const upload = multer({
+// ==============================
+// 🚀 MULTER INSTANCES
+// ==============================
+
+// ✅ For routes WITH file upload
+const uploadFile = multer({
   storage,
-  fileFilter
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
 });
 
-module.exports = upload;
+// ✅ For routes WITHOUT file (ONLY form-data fields)
+const uploadNone = multer().none();
+
+// ==============================
+// ❌ ERROR HANDLER (VERY IMPORTANT)
+// ==============================
+const handleMulterError = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    return res.status(400).json({
+      message: "Multer error",
+      error: err.message
+    });
+  } else if (err) {
+    return res.status(400).json({
+      message: "Upload error",
+      error: err.message
+    });
+  }
+  next();
+};
+
+// ==============================
+// 📦 EXPORTS
+// ==============================
+module.exports = {
+  uploadFile,
+  uploadNone,
+  handleMulterError
+};

@@ -31,6 +31,9 @@ app.get("/api/protected", authMiddleware, (req, res) => {
   res.json({ message: "This is a protected route", userId: req.user });
 });
 
+const { handleMulterError } = require("./middleware/uploadMiddleware");
+app.use(handleMulterError);
+
 // Dataset routes
 const datasetRoute = require("./server/routes/datasetRoute");
 app.use("/api/dataset", datasetRoute);

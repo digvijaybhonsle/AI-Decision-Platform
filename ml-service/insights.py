@@ -5,18 +5,10 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATASET_PATH = os.path.join(BASE_DIR, "datasets")
 
 
-def generate_insights(file_path: str):
+def generate_insights_from_df(df):
     try:
-        # 📂 Load dataset dynamically
-        if file_path.endswith(".csv"):
-            df = pd.read_csv(file_path)
-        else:
-            df = pd.read_excel(file_path)
-
         df.columns = df.columns.str.strip()
         df = df.dropna()
-
-        print("📊 Columns:", df.columns.tolist())
 
         # =========================
         # 🔢 Numeric Columns
@@ -29,13 +21,15 @@ def generate_insights(file_path: str):
         # =========================
         # 💰 Detect Spending Columns
         # =========================
-        spending_cols = [col for col in df.columns if "mnt" in col.lower() or "spend" in col.lower()]
+        spending_cols = [
+            col for col in df.columns
+            if "mnt" in col.lower() or "spend" in col.lower()
+        ]
 
         if spending_cols:
             df["Total_Spending"] = df[spending_cols].sum(axis=1)
             target_col = "Total_Spending"
         else:
-            # fallback → last numeric column
             target_col = numeric_cols[-1]
 
         # =========================
@@ -50,7 +44,7 @@ def generate_insights(file_path: str):
         }
 
         # =========================
-        # 📈 Trend (auto select X axis)
+        # 📈 Trend
         # =========================
         x_col = numeric_cols[0] if numeric_cols[0] != target_col else numeric_cols[1]
 
@@ -69,12 +63,12 @@ def generate_insights(file_path: str):
         distribution = df[numeric_cols].sum().to_dict()
 
         # =========================
-        # 💡 Recommendations (dynamic)
+        # 💡 Recommendations
         # =========================
         recommendations = []
 
         if df[target_col].mean() < df[target_col].median():
-            recommendations.append("Target strategies to improve overall performance")
+            recommendations.append("Improve overall performance strategy")
 
         if df[target_col].std() > df[target_col].mean() * 0.5:
             recommendations.append("High variability detected — stabilize operations")

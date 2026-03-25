@@ -8,7 +8,7 @@ import json
 import time
 
 from predict import predict_with_confidence
-from insights import generate_insights
+from insights import generate_insights_from_df
 from train_model import train_model
 from typing import List
 from typing import Dict
@@ -237,33 +237,11 @@ def simulate(requests: List[Dict[str, float]]):
 # ==============================
 @app.post("/insights")
 async def insights(file: UploadFile = File(...)):
-    try:
-        # 🔥 Validate file type
-        if not file.filename.endswith((".csv", ".xlsx")):
-            return {"error": "Only CSV or Excel files are supported"}
+    import pandas as pd
 
-        # 📂 Read file safely
-        if file.filename.endswith(".csv"):
-            df = pd.read_csv(file.file)
-        else:
-            df = pd.read_excel(file.file)
+    df = pd.read_csv(file.file)
 
-        # ❌ Empty check
-        if df.empty:
-            return {"error": "Uploaded file is empty"}
-
-        # 🔄 Reset pointer (important for some cases)
-        file.file.seek(0)
-
-        # 🚀 Generate insights
-        return generate_insights(df)
-
-    except Exception as e:
-        import traceback
-        return {
-            "error": str(e),
-            "trace": traceback.format_exc()
-        }
+    return generate_insights_from_df(df)
 
 
 # ==============================

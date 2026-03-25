@@ -2,26 +2,13 @@ const multer = require("multer");
 const fs = require("fs");
 const path = require("path");
 
-// 📁 Upload folder
+// 📁 Upload folder (ONLY if disk storage is used)
 const uploadPath = path.join(__dirname, "../uploads");
 
-// ✅ Ensure folder exists (important for deployment)
+// Ensure folder exists
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
 }
-
-// ==============================
-// 🧠 STORAGE CONFIG (for file upload routes)
-// ==============================
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadPath);
-  },
-  filename: function (req, file, cb) {
-    const uniqueName = Date.now() + "-" + file.originalname;
-    cb(null, uniqueName);
-  }
-});
 
 // ==============================
 // 📄 FILE FILTER (CSV only)
@@ -38,23 +25,50 @@ const fileFilter = (req, file, cb) => {
 };
 
 // ==============================
-// 🚀 MULTER INSTANCES
+// 🧠 STORAGE OPTIONS
 // ==============================
 
-// ✅ For routes WITH file upload
-const uploadFile = multer({
-  storage,
-  fileFilter,
-  limits: {
-    fileSize: 5 * 1024 * 1024 // 5MB limit
+// 🔥 1. MEMORY STORAGE (BEST for ML streaming)
+const memoryStorage = multer.memoryStorage();
+
+// 🧠 2. DISK STORAGE (OPTIONAL - if you still need uploads)
+const diskStorage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    const uniqueName = Date.now() + "-" + file.originalname;
+    cb(null, uniqueName);
   }
 });
 
-// ✅ For routes WITHOUT file (ONLY form-data fields)
+// ==============================
+// 🚀 MULTER INSTANCES
+// ==============================
+
+// ✅ For ML TRAIN (STREAM FILE → NO DISK)
+const uploadMemory = multer({
+  storage: memoryStorage,
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024
+  }
+});
+
+// ✅ Optional: For dataset upload (if you still use DB + uploads)
+const uploadDisk = multer({
+  storage: diskStorage,
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024
+  }
+});
+
+// ✅ For form-data without file
 const uploadNone = multer().none();
 
 // ==============================
-// ❌ ERROR HANDLER (VERY IMPORTANT)
+// ❌ ERROR HANDLER
 // ==============================
 const handleMulterError = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -75,7 +89,8 @@ const handleMulterError = (err, req, res, next) => {
 // 📦 EXPORTS
 // ==============================
 module.exports = {
-  uploadFile,
+  uploadMemory,  // 🔥 USE THIS for /train
+  uploadDisk,    // optional (upload dataset)
   uploadNone,
   handleMulterError
 };

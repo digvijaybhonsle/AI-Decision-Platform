@@ -1,107 +1,114 @@
 const axios = require("axios");
 const Prediction = require("../models/Prediction");
-const Dataset = require("../models/Dataset");
 
 exports.runPrediction = async (req, res) => {
   try {
+    const { inputValues } = req.body;
 
-    const { datasetId, inputValues } = req.body;
+    console.log("📥 Prediction Input:", inputValues);
 
-    // ✅ Validate input
-    if (!datasetId || !inputValues || typeof inputValues !== "object") {
+    // ============================
+    // ✅ VALIDATION
+    // ============================
+    if (!inputValues || typeof inputValues !== "object") {
       return res.status(400).json({
-        message: "datasetId and valid inputValues are required"
+        message: "Valid inputValues object is required"
       });
     }
 
-    // ✅ Check dataset
-    const dataset = await Dataset.findById(datasetId);
+    // ============================
+    // 🔥 CALL ML SERVICE
+    // ============================
+    const ML_URL = `${process.env.ML_API_URL}/predict`;
 
-    if (!dataset) {
-      return res.status(404).json({
-        message: "Dataset not found"
-      });
-    }
-
-    // ✅ Call ML API (IMPORTANT FIX)
     const response = await axios.post(
-      `${process.env.ML_API_URL}/predict`,
+      ML_URL,
+      inputValues, // ✅ send directly
       {
-        ...inputValues   // ensure correct format
-      },
-      {
-        timeout: 10000 // prevent hanging
+        headers: {
+          "Content-Type": "application/json"
+        },
+        timeout: 180000 // 🔥 important for Render
       }
     );
 
-    // ✅ Validate ML response
-    if (!response.data) {
-      return res.status(500).json({
-        message: "Invalid response from ML service"
+    console.log("✅ ML RESPONSE:", response.data);
+
+    const mlData = response.data;
+
+    // ============================
+    // ❌ HANDLE ML ERROR
+    // ============================
+    if (!mlData || mlData.error) {
+      return res.status(400).json({
+        message: "ML error",
+        error: mlData
       });
     }
 
-    // ✅ Extract prediction safely
+    // ============================
+    // ✅ EXTRACT PREDICTION
+    // ============================
     const predictedValue =
-      response.data.predicted_revenue ??
-      response.data.prediction ??
-      response.data.result ??
+      mlData.prediction ??
+      mlData.predicted_revenue ??
+      mlData.result ??
       null;
 
     if (predictedValue === null) {
       return res.status(500).json({
-        message: "Prediction not returned from ML service"
+        message: "Prediction not returned from ML service",
+        mlResponse: mlData
       });
     }
 
-    // ✅ Save prediction
+    // ============================
+    // 💾 SAVE PREDICTION
+    // ============================
     const prediction = new Prediction({
-      datasetId,
       inputValues,
       predictedValue
     });
 
     await prediction.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Prediction generated successfully",
       prediction,
-      mlResponse: response.data
+      mlResponse: mlData
     });
 
   } catch (error) {
+    console.error("❌ Prediction Error:", {
+      message: error.message,
+      status: error.response?.status,
+      data: error.response?.data
+    });
 
-    console.error("Prediction Error:", error.response?.data || error.message);
-
-    res.status(500).json({
+    return res.status(500).json({
       message: "ML service error",
       error: error.response?.data || error.message
     });
-
   }
 };
 
 
-// 🔥 GET HISTORY (minor improvement)
+// 🔥 GET HISTORY
 exports.getPredictionHistory = async (req, res) => {
   try {
-
     const predictions = await Prediction.find()
-      .populate("datasetId", "datasetName")
       .sort({ createdAt: -1 });
 
-    res.status(200).json({
+    return res.status(200).json({
       count: predictions.length,
       predictions
     });
 
   } catch (error) {
+    console.error("❌ History Error:", error);
 
-    console.error(error);
-
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error"
     });
-
   }
 };

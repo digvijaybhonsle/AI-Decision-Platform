@@ -235,14 +235,35 @@ def simulate(requests: List[Dict[str, float]]):
 # ==============================
 # STEP 6: INSIGHTS
 # ==============================
-@app.get("/insights")
-def get_insights(file_name: str):
-    file_path = os.path.join("/tmp/uploads", file_name)  
+@app.post("/insights")
+async def insights(file: UploadFile = File(...)):
+    try:
+        # 🔥 Validate file type
+        if not file.filename.endswith((".csv", ".xlsx")):
+            return {"error": "Only CSV or Excel files are supported"}
 
-    if not os.path.exists(file_path):
-        return {"error": "File not found"}
+        # 📂 Read file safely
+        if file.filename.endswith(".csv"):
+            df = pd.read_csv(file.file)
+        else:
+            df = pd.read_excel(file.file)
 
-    return generate_insights(file_path)
+        # ❌ Empty check
+        if df.empty:
+            return {"error": "Uploaded file is empty"}
+
+        # 🔄 Reset pointer (important for some cases)
+        file.file.seek(0)
+
+        # 🚀 Generate insights
+        return generate_insights(df)
+
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "trace": traceback.format_exc()
+        }
 
 
 # ==============================

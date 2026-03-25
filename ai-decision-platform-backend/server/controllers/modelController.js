@@ -56,11 +56,9 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // 🔥 Construct full path
     const fullPath = path.join(UPLOAD_DIR, dataset.filePath);
 
     console.log("📁 FILE PATH:", fullPath);
-    console.log("📁 EXISTS:", fs.existsSync(fullPath));
 
     if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
@@ -87,12 +85,14 @@ exports.trainModel = async (req, res) => {
     // ============================
     const formData = new FormData();
 
-    const fileBuffer = fs.readFileSync(fullPath);
+    // ✅ FIX: use stream instead of buffer
+    const fileStream = fs.createReadStream(fullPath);
 
-    formData.append("file", fileBuffer, {
+    formData.append("file", fileStream, {
       filename: path.basename(fullPath),
       contentType: "text/csv",
     });
+
     formData.append("model_type", model_type);
 
     if (features) {
@@ -108,7 +108,9 @@ exports.trainModel = async (req, res) => {
     console.log("🚀 Sending to ML:", ML_URL);
 
     const response = await axios.post(ML_URL, formData, {
-      headers: formData.getHeaders(),
+      headers: {
+        ...formData.getHeaders(),
+      },
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
       timeout: 300000,

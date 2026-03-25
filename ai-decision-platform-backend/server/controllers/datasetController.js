@@ -11,7 +11,7 @@ exports.uploadDataset = async (req, res) => {
       });
     }
 
-    const filePath = path.resolve(req.file.path);
+    const filePath = req.file.path;
 
     let columns = [];
     let rows = 0;
@@ -25,36 +25,50 @@ exports.uploadDataset = async (req, res) => {
         rows++;
       })
       .on("end", async () => {
-        const dataset = new Dataset({
-          userId: req.user,
-          datasetName: req.file.originalname,
-          columns,
-          rows,
-          filePath: path.resolve(req.file.path),
-        });
+        try {
+          const dataset = new Dataset({
+            userId: req.user?._id || req.user,
+            datasetName: req.file.originalname,
+            columns,
+            rows,
+            filePath: filePath,
+          });
 
-        await dataset.save();
-        console.log("File received:", req.file);
-        console.log("File path:", req.file?.path);
-        res.status(201).json({
-          message: "Dataset uploaded successfully",
-          datasetId: dataset._id,
-          filename: dataset.datasetName,
-          columns,
-          rows,
-        });
+          await dataset.save();
+
+          console.log("File received:", req.file);
+          console.log("File path:", filePath);
+
+          res.status(201).json({
+            message: "Dataset uploaded successfully",
+            datasetId: dataset._id,
+            filename: dataset.datasetName,
+            columns,
+            rows,
+          });
+
+        } catch (err) {
+          console.error("SAVE ERROR:", err);
+          res.status(500).json({
+            message: "Error saving dataset",
+            error: err.message
+          });
+        }
       })
       .on("error", (error) => {
-        console.error(error);
+        console.error("CSV ERROR:", error);
         res.status(500).json({
           message: "Error processing CSV file",
+          error: error.message
         });
       });
+
   } catch (error) {
-    console.error(error);
+    console.error("UPLOAD ERROR:", error);
 
     res.status(500).json({
       message: "Server error",
+      error: error.message
     });
   }
 };

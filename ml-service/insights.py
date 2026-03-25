@@ -2,51 +2,99 @@ import pandas as pd
 import os
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
 DATASET_PATH = os.path.join(BASE_DIR, "datasets")
-MODEL_PATH = os.path.join(BASE_DIR, "models")
 
-def generate_insights():
-    df = pd.read_excel(os.path.join(DATASET_PATH, "marketing_campaign.xlsx"))
-    df.columns = df.columns.str.strip()
-    df = df.dropna()
 
-    # Total Spending
-    df['Total_Spending'] = (
-        df['MntWines'] +
-        df['MntFruits'] +
-        df['MntMeatProducts'] +
-        df['MntFishProducts'] +
-        df['MntSweetProducts'] +
-        df['MntGoldProds']
-    )
+def generate_insights(file_path: str):
+    try:
+        # 📂 Load dataset dynamically
+        if file_path.endswith(".csv"):
+            df = pd.read_csv(file_path)
+        else:
+            df = pd.read_excel(file_path)
 
-    # 📊 Summary
-    summary = {
-        "avg_income": df['Income'].mean(),
-        "avg_spending": df['Total_Spending'].mean()
-    }
+        df.columns = df.columns.str.strip()
+        df = df.dropna()
 
-    # 📈 Income vs Spending trend
-    trend = df.groupby('Income')['Total_Spending'].mean().reset_index()
+        print("📊 Columns:", df.columns.tolist())
 
-    trend_data = trend.head(20).to_dict(orient="records")
+        # =========================
+        # 🔢 Numeric Columns
+        # =========================
+        numeric_cols = df.select_dtypes(include=['number']).columns.tolist()
 
-    # 📊 Distribution (for pie chart)
-    distribution = df[['MntWines','MntFruits','MntMeatProducts']].sum().to_dict()
+        if len(numeric_cols) < 2:
+            return {"error": "Not enough numeric data for insights"}
 
-    # 💡 Recommendations
-    recommendations = []
+        # =========================
+        # 💰 Detect Spending Columns
+        # =========================
+        spending_cols = [col for col in df.columns if "mnt" in col.lower() or "spend" in col.lower()]
 
-    if summary["avg_income"] > 50000:
-        recommendations.append("Target high-income customers for premium products")
+        if spending_cols:
+            df["Total_Spending"] = df[spending_cols].sum(axis=1)
+            target_col = "Total_Spending"
+        else:
+            # fallback → last numeric column
+            target_col = numeric_cols[-1]
 
-    if summary["avg_spending"] < 1000:
-        recommendations.append("Increase marketing efforts to boost spending")
+        # =========================
+        # 📊 Summary
+        # =========================
+        summary = {
+            "columns_analyzed": numeric_cols,
+            "target_used": target_col,
+            "avg_target": float(df[target_col].mean()),
+            "max_target": float(df[target_col].max()),
+            "min_target": float(df[target_col].min())
+        }
 
-    return {
-        "summary": summary,
-        "trend": trend_data,
-        "distribution": distribution,
-        "recommendations": recommendations
-    }
+        # =========================
+        # 📈 Trend (auto select X axis)
+        # =========================
+        x_col = numeric_cols[0] if numeric_cols[0] != target_col else numeric_cols[1]
+
+        trend = (
+            df.groupby(x_col)[target_col]
+            .mean()
+            .reset_index()
+            .head(20)
+        )
+
+        trend_data = trend.to_dict(orient="records")
+
+        # =========================
+        # 📊 Distribution
+        # =========================
+        distribution = df[numeric_cols].sum().to_dict()
+
+        # =========================
+        # 💡 Recommendations (dynamic)
+        # =========================
+        recommendations = []
+
+        if df[target_col].mean() < df[target_col].median():
+            recommendations.append("Target strategies to improve overall performance")
+
+        if df[target_col].std() > df[target_col].mean() * 0.5:
+            recommendations.append("High variability detected — stabilize operations")
+
+        if spending_cols:
+            recommendations.append("Focus on high-performing product categories")
+
+        if not recommendations:
+            recommendations.append("Data looks stable — maintain current strategy")
+
+        return {
+            "summary": summary,
+            "trend": trend_data,
+            "distribution": distribution,
+            "recommendations": recommendations
+        }
+
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "trace": traceback.format_exc()
+        }

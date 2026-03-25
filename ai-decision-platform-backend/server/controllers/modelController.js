@@ -17,7 +17,7 @@ exports.trainModel = async (req, res) => {
     // ✅ Validate basic fields
     if (!datasetId || !model_type) {
       return res.status(400).json({
-        message: "datasetId and model_type are required"
+        message: "datasetId and model_type are required",
       });
     }
 
@@ -28,14 +28,14 @@ exports.trainModel = async (req, res) => {
           features = JSON.parse(features);
         } catch {
           return res.status(400).json({
-            message: "Invalid features format"
+            message: "Invalid features format",
           });
         }
       }
 
       if (!Array.isArray(features)) {
         return res.status(400).json({
-          message: "Features must be an array"
+          message: "Features must be an array",
         });
       }
     }
@@ -45,33 +45,38 @@ exports.trainModel = async (req, res) => {
 
     if (!dataset) {
       return res.status(404).json({
-        message: "Dataset not found"
+        message: "Dataset not found",
       });
     }
 
-    const fullPath = path.resolve(
-      __dirname,
-      "../uploads",
-      dataset.filePath
-    );
+    let fullPath;
+
+    if (path.isAbsolute(dataset.filePath)) {
+      fullPath = dataset.filePath; 
+    } else {
+      fullPath = path.resolve(__dirname, "../uploads", dataset.filePath);
+    }
+
+    console.log("FINAL PATH:", fullPath);
+    console.log("FILE EXISTS:", fs.existsSync(fullPath));
 
     console.log("📁 DATASET PATH:", fullPath);
 
     if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
-        message: "Dataset file not found on server"
+        message: "Dataset file not found on server",
       });
     }
 
     // ✅ Prevent duplicate model
     const existing = await Model.findOne({
       datasetId,
-      modelType: model_type
+      modelType: model_type,
     });
 
     if (existing) {
       return res.status(400).json({
-        message: "Model already trained for this dataset"
+        message: "Model already trained for this dataset",
       });
     }
 
@@ -100,8 +105,8 @@ exports.trainModel = async (req, res) => {
         headers: formData.getHeaders(),
         maxContentLength: Infinity,
         maxBodyLength: Infinity,
-        timeout: 60000
-      }
+        timeout: 60000,
+      },
     );
 
     console.log("✅ ML RESPONSE:", response.data);
@@ -111,7 +116,7 @@ exports.trainModel = async (req, res) => {
       return res.status(400).json({
         message: "ML error",
         error: response.data.error,
-        details: response.data
+        details: response.data,
       });
     }
 
@@ -125,7 +130,7 @@ exports.trainModel = async (req, res) => {
     const model = new Model({
       datasetId,
       modelType: model_type,
-      accuracy
+      accuracy,
     });
 
     await model.save();
@@ -133,23 +138,21 @@ exports.trainModel = async (req, res) => {
     return res.status(201).json({
       message: "Model trained successfully",
       model,
-      mlResponse: response.data
+      mlResponse: response.data,
     });
-
   } catch (error) {
     console.error("❌ FULL ERROR:", {
       message: error.message,
       status: error.response?.status,
-      data: error.response?.data
+      data: error.response?.data,
     });
 
     return res.status(500).json({
       message: "ML service error",
-      error: error.response?.data || error.message
+      error: error.response?.data || error.message,
     });
   }
 };
-
 
 // 🔥 GET MODELS
 exports.getModelByDataset = async (req, res) => {
@@ -160,20 +163,19 @@ exports.getModelByDataset = async (req, res) => {
 
     if (!models.length) {
       return res.status(404).json({
-        message: "No models found"
+        message: "No models found",
       });
     }
 
     return res.status(200).json({
       message: "Models fetched successfully",
-      models
+      models,
     });
-
   } catch (error) {
     console.error("Get Model Error:", error);
 
     return res.status(500).json({
-      message: "Server error"
+      message: "Server error",
     });
   }
 };

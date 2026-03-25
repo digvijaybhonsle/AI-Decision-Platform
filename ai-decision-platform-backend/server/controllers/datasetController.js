@@ -31,13 +31,13 @@ exports.uploadDataset = async (req, res) => {
             datasetName: req.file.originalname,
             columns,
             rows,
-            filePath: filePath,
+            filePath: req.file.filename, // ✅ FIXED HERE
           });
 
           await dataset.save();
 
           console.log("File received:", req.file);
-          console.log("File path:", filePath);
+          console.log("Stored filename:", req.file.filename);
 
           res.status(201).json({
             message: "Dataset uploaded successfully",

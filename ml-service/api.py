@@ -236,13 +236,13 @@ def simulate(requests: List[Dict[str, float]]):
 # STEP 6: INSIGHTS
 # ==============================
 @app.get("/insights")
-def insights():
-    global current_dataset
+def get_insights(file_name: str):
+    file_path = os.path.join("/tmp/uploads", file_name)  
 
-    if current_dataset is None:
-        return {"error": "No dataset available"}
+    if not os.path.exists(file_path):
+        return {"error": "File not found"}
 
-    return generate_insights(current_dataset)
+    return generate_insights(file_path)
 
 
 # ==============================
@@ -250,20 +250,64 @@ def insights():
 # ==============================
 @app.get("/feature-importance")
 def feature_importance():
-    global model, current_model_file
-    if model is None or current_model_file is None:
-        return {"error": "Model not trained yet"}
+    import os
+    import joblib
 
-    loaded = joblib.load(current_model_file)
-    model_obj = loaded["model"]
-    features = loaded["features"]
+    global current_model_file
 
-    if not hasattr(model_obj, "feature_importances_"):
-        return {"error": "Feature importance not available for this model"}
+    try:
+        # ❌ Do NOT rely on global model (Render resets it)
+        if current_model_file is None:
+            return {"error": "No trained model available"}
 
-    importances = model_obj.feature_importances_
-    result = [{"feature": f, "importance": float(i)} for f, i in zip(features, importances)]
-    return sorted(result, key=lambda x: x["importance"], reverse=True)
+        if not os.path.exists(current_model_file):
+            return {"error": "Model file not found"}
+
+        # ✅ Always load fresh
+        loaded = joblib.load(current_model_file)
+
+        model_obj = loaded.get("model")
+        features = loaded.get("features")
+
+        # 🚨 Safety checks
+        if model_obj is None:
+            return {"error": "Model is None"}
+
+        if not features:
+            return {"error": "Features missing in model file"}
+
+        # ❌ Not all models support importance
+        if not hasattr(model_obj, "feature_importances_"):
+            return {
+                "error": "Feature importance not available for this model",
+                "model_type": type(model_obj).__name__
+            }
+
+        importances = model_obj.feature_importances_
+
+        # ✅ Ensure same length
+        if len(importances) != len(features):
+            return {"error": "Feature mismatch with model"}
+
+        result = [
+            {"feature": f, "importance": float(i)}
+            for f, i in zip(features, importances)
+        ]
+
+        # 🔥 Sort descending
+        result = sorted(result, key=lambda x: x["importance"], reverse=True)
+
+        return {
+            "model_type": type(model_obj).__name__,
+            "feature_importance": result
+        }
+
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "trace": traceback.format_exc()
+        }
 
 
 @app.get("/models")

@@ -87,7 +87,10 @@ exports.trainModel = async (req, res) => {
     // ============================
     const formData = new FormData();
 
-    formData.append("file", fs.createReadStream(fullPath));
+    formData.append("file", fs.createReadStream(fullPath), {
+      filename: path.basename(fullPath),
+      contentType: "text/csv",
+    });
     formData.append("model_type", model_type);
 
     if (features) {
@@ -145,7 +148,6 @@ exports.trainModel = async (req, res) => {
       model,
       mlResponse: response.data,
     });
-
   } catch (error) {
     console.error("❌ FULL ERROR:", {
       message: error.message,
@@ -159,7 +161,6 @@ exports.trainModel = async (req, res) => {
     });
   }
 };
-
 
 // 🔥 GET MODELS BY DATASET
 exports.getModelByDataset = async (req, res) => {
@@ -178,7 +179,6 @@ exports.getModelByDataset = async (req, res) => {
       message: "Models fetched successfully",
       models,
     });
-
   } catch (error) {
     console.error("Get Model Error:", error);
 

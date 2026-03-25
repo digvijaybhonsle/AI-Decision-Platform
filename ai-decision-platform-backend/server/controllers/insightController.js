@@ -23,7 +23,7 @@ exports.generateInsights = async (req, res) => {
 
     if (!dataset) {
       return res.status(404).json({
-        message: "Dataset not found"
+        message: "Dataset not found",
       });
     }
 
@@ -34,7 +34,7 @@ exports.generateInsights = async (req, res) => {
 
     if (!model) {
       return res.status(400).json({
-        message: "Model not trained for this dataset"
+        message: "Model not trained for this dataset",
       });
     }
 
@@ -48,7 +48,7 @@ exports.generateInsights = async (req, res) => {
 
     if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
-        message: "Dataset file not found on server"
+        message: "Dataset file not found on server",
       });
     }
 
@@ -57,7 +57,10 @@ exports.generateInsights = async (req, res) => {
     // ============================
     const formData = new FormData();
 
-    formData.append("file", fs.createReadStream(fullPath));
+    formData.append("file", fs.createReadStream(fullPath), {
+      filename: path.basename(fullPath),
+      contentType: "text/csv",
+    });
 
     const ML_URL = `${process.env.ML_API_URL}/insights`;
 
@@ -65,9 +68,9 @@ exports.generateInsights = async (req, res) => {
 
     const response = await axios.post(ML_URL, formData, {
       headers: {
-        ...formData.getHeaders()
+        ...formData.getHeaders(),
       },
-      timeout: 180000
+      timeout: 180000,
     });
 
     const mlData = response.data;
@@ -80,7 +83,7 @@ exports.generateInsights = async (req, res) => {
     if (!mlData || mlData.error) {
       return res.status(400).json({
         message: "ML error",
-        error: mlData
+        error: mlData,
       });
     }
 
@@ -92,7 +95,7 @@ exports.generateInsights = async (req, res) => {
       summary: mlData.summary || {},
       trend: mlData.trend || [],
       distribution: mlData.distribution || {},
-      recommendations: mlData.recommendations || []
+      recommendations: mlData.recommendations || [],
     });
 
     await insight.save();
@@ -100,19 +103,18 @@ exports.generateInsights = async (req, res) => {
     return res.status(200).json({
       message: "Insights generated successfully",
       insight,
-      mlResponse: mlData
+      mlResponse: mlData,
     });
-
   } catch (error) {
     console.error("❌ Insight Error:", {
       message: error.message,
       status: error.response?.status,
-      data: error.response?.data
+      data: error.response?.data,
     });
 
     return res.status(500).json({
       message: "ML service error",
-      error: error.response?.data || error.message
+      error: error.response?.data || error.message,
     });
   }
 };

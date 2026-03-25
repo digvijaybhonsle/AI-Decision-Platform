@@ -1,18 +1,43 @@
 const axios = require("axios");
 const Simulation = require("../models/Simulation");
+const Dataset = require("../models/Dataset");
+const Model = require("../models/Model");
 
+// 🚀 RUN SIMULATION
 exports.runSimulation = async (req, res) => {
   try {
-    const inputArray = req.body;
+    const { datasetId, inputs } = req.body;
 
-    console.log("📥 Simulation Input:", inputArray);
+    console.log("📥 Simulation Input:", req.body);
 
     // ============================
     // ✅ VALIDATION
     // ============================
-    if (!Array.isArray(inputArray) || inputArray.length === 0) {
+    if (!datasetId || !Array.isArray(inputs) || inputs.length === 0) {
       return res.status(400).json({
-        message: "Input must be a non-empty array"
+        message: "datasetId and non-empty inputs array are required"
+      });
+    }
+
+    // ============================
+    // ✅ CHECK DATASET
+    // ============================
+    const dataset = await Dataset.findById(datasetId);
+
+    if (!dataset) {
+      return res.status(404).json({
+        message: "Dataset not found"
+      });
+    }
+
+    // ============================
+    // ✅ CHECK MODEL
+    // ============================
+    const model = await Model.findOne({ datasetId });
+
+    if (!model) {
+      return res.status(400).json({
+        message: "Model not trained for this dataset"
       });
     }
 
@@ -21,12 +46,18 @@ exports.runSimulation = async (req, res) => {
     // ============================
     const ML_URL = `${process.env.ML_API_URL}/simulate`;
 
-    const response = await axios.post(ML_URL, inputArray, {
-      headers: {
-        "Content-Type": "application/json"
+    const response = await axios.post(
+      ML_URL,
+      {
+        inputs: inputs   // 🔥 IMPORTANT (match ML API)
       },
-      timeout: 180000 // 🔥 increased for Render
-    });
+      {
+        headers: {
+          "Content-Type": "application/json"
+        },
+        timeout: 180000
+      }
+    );
 
     console.log("✅ ML RESPONSE:", response.data);
 
@@ -53,6 +84,7 @@ exports.runSimulation = async (req, res) => {
     // 💾 SAVE SIMULATIONS
     // ============================
     const simulationsToSave = results.map(item => ({
+      datasetId,
       inputValues: item.input,
       predictedRevenue: item.prediction
     }));

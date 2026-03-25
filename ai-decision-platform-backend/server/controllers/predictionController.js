@@ -1,18 +1,43 @@
 const axios = require("axios");
 const Prediction = require("../models/Prediction");
+const Dataset = require("../models/Dataset");
+const Model = require("../models/Model");
 
+// 🚀 RUN PREDICTION
 exports.runPrediction = async (req, res) => {
   try {
-    const { inputValues } = req.body;
+    const { datasetId, inputValues } = req.body;
 
-    console.log("📥 Prediction Input:", inputValues);
+    console.log("📥 Prediction Input:", req.body);
 
     // ============================
     // ✅ VALIDATION
     // ============================
-    if (!inputValues || typeof inputValues !== "object") {
+    if (!datasetId || !inputValues || typeof inputValues !== "object") {
       return res.status(400).json({
-        message: "Valid inputValues object is required"
+        message: "datasetId and valid inputValues object are required"
+      });
+    }
+
+    // ============================
+    // ✅ CHECK DATASET
+    // ============================
+    const dataset = await Dataset.findById(datasetId);
+
+    if (!dataset) {
+      return res.status(404).json({
+        message: "Dataset not found"
+      });
+    }
+
+    // ============================
+    // ✅ CHECK MODEL EXISTS
+    // ============================
+    const model = await Model.findOne({ datasetId });
+
+    if (!model) {
+      return res.status(400).json({
+        message: "Model not trained for this dataset"
       });
     }
 
@@ -23,12 +48,14 @@ exports.runPrediction = async (req, res) => {
 
     const response = await axios.post(
       ML_URL,
-      inputValues, // ✅ send directly
+      {
+        input: inputValues   // 🔥 IMPORTANT (match ML API)
+      },
       {
         headers: {
           "Content-Type": "application/json"
         },
-        timeout: 180000 // 🔥 important for Render
+        timeout: 180000
       }
     );
 
@@ -51,8 +78,8 @@ exports.runPrediction = async (req, res) => {
     // ============================
     const predictedValue =
       mlData.prediction ??
-      mlData.predicted_revenue ??
       mlData.result ??
+      mlData.predicted_revenue ??
       null;
 
     if (predictedValue === null) {
@@ -66,6 +93,7 @@ exports.runPrediction = async (req, res) => {
     // 💾 SAVE PREDICTION
     // ============================
     const prediction = new Prediction({
+      datasetId,
       inputValues,
       predictedValue
     });
@@ -97,6 +125,7 @@ exports.runPrediction = async (req, res) => {
 exports.getPredictionHistory = async (req, res) => {
   try {
     const predictions = await Prediction.find()
+      .populate("datasetId", "datasetName")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({

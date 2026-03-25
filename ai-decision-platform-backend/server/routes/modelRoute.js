@@ -7,9 +7,9 @@ const {
 } = require("../controllers/modelController");
 
 const authMiddleware = require("../middleware/authMiddleware");
-const { uploadMemory } = require("../middleware/uploadMiddleware");
+const { uploadNone } = require("../middleware/uploadMiddleware");
 
-router.post("/train", authMiddleware, uploadMemory.single("file"), trainModel);
+router.post("/train", authMiddleware, uploadNone, trainModel);
 router.get("/:datasetId", authMiddleware, getModelByDataset);
 
 module.exports = router;

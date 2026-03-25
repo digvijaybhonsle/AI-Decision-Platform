@@ -3,6 +3,12 @@ const csv = require("csv-parser");
 const fs = require("fs");
 const path = require("path");
 
+// 📁 Upload folder (same as multer)
+const UPLOAD_DIR = path.join(__dirname, "../uploads");
+
+// ==============================
+// 🚀 UPLOAD DATASET
+// ==============================
 exports.uploadDataset = async (req, res) => {
   try {
     if (!req.file) {
@@ -11,12 +17,13 @@ exports.uploadDataset = async (req, res) => {
       });
     }
 
-    const filePath = req.file.path;
+    const absolutePath = req.file.path; // full server path
+    const filename = req.file.filename;
 
     let columns = [];
     let rows = 0;
 
-    fs.createReadStream(filePath)
+    fs.createReadStream(absolutePath)
       .pipe(csv())
       .on("headers", (headers) => {
         columns = headers;
@@ -31,13 +38,15 @@ exports.uploadDataset = async (req, res) => {
             datasetName: req.file.originalname,
             columns,
             rows,
-            filePath: req.file.filename, // ✅ FIXED HERE
+
+            // ✅ STORE ONLY FILENAME (NOT FULL PATH)
+            filePath: filename,
           });
 
           await dataset.save();
 
-          console.log("File received:", req.file);
-          console.log("Stored filename:", req.file.filename);
+          console.log("✅ File uploaded:", absolutePath);
+          console.log("✅ Stored filename:", filename);
 
           res.status(201).json({
             message: "Dataset uploaded successfully",
@@ -48,7 +57,7 @@ exports.uploadDataset = async (req, res) => {
           });
 
         } catch (err) {
-          console.error("SAVE ERROR:", err);
+          console.error("❌ SAVE ERROR:", err);
           res.status(500).json({
             message: "Error saving dataset",
             error: err.message
@@ -56,7 +65,7 @@ exports.uploadDataset = async (req, res) => {
         }
       })
       .on("error", (error) => {
-        console.error("CSV ERROR:", error);
+        console.error("❌ CSV ERROR:", error);
         res.status(500).json({
           message: "Error processing CSV file",
           error: error.message
@@ -64,7 +73,7 @@ exports.uploadDataset = async (req, res) => {
       });
 
   } catch (error) {
-    console.error("UPLOAD ERROR:", error);
+    console.error("❌ UPLOAD ERROR:", error);
 
     res.status(500).json({
       message: "Server error",
@@ -73,6 +82,10 @@ exports.uploadDataset = async (req, res) => {
   }
 };
 
+
+// ==============================
+// 📦 GET ALL DATASETS
+// ==============================
 exports.getDataset = async (req, res) => {
   try {
     const datasets = await Dataset.find({ userId: req.user });
@@ -92,6 +105,10 @@ exports.getDataset = async (req, res) => {
   }
 };
 
+
+// ==============================
+// 🔍 GET DATASET BY ID
+// ==============================
 exports.getDatasetById = async (req, res) => {
   try {
     const dataset = await Dataset.findById(req.params.id);
@@ -99,7 +116,9 @@ exports.getDatasetById = async (req, res) => {
     if (!dataset) {
       return res.status(404).json({ message: "Dataset not Found" });
     }
+
     res.status(200).json(dataset);
+
   } catch (error) {
     console.error(error);
 
@@ -110,6 +129,10 @@ exports.getDatasetById = async (req, res) => {
   }
 };
 
+
+// ==============================
+// ❌ DELETE DATASET
+// ==============================
 exports.deleteDatasetById = async (req, res) => {
   try {
     const dataset = await Dataset.findById(req.params.id);
@@ -117,13 +140,22 @@ exports.deleteDatasetById = async (req, res) => {
     if (!dataset) {
       return res.status(404).json({ message: "Dataset not Found" });
     }
-    if (fs.existsSync(dataset.filePath)) {
-      fs.unlinkSync(dataset.filePath);
+
+    // 🔥 Construct FULL PATH
+    const fullPath = path.join(UPLOAD_DIR, dataset.filePath);
+
+    console.log("🗑 Deleting file:", fullPath);
+
+    if (fs.existsSync(fullPath)) {
+      fs.unlinkSync(fullPath);
     }
+
     await dataset.deleteOne();
+
     res.status(200).json({
-      message: "Dataset deleted succesfully",
+      message: "Dataset deleted successfully",
     });
+
   } catch (error) {
     console.error(error);
 
@@ -134,6 +166,10 @@ exports.deleteDatasetById = async (req, res) => {
   }
 };
 
+
+// ==============================
+// 👀 PREVIEW DATASET
+// ==============================
 exports.previewDataset = async (req, res) => {
   try {
     const dataset = await Dataset.findById(req.params.id);
@@ -142,9 +178,13 @@ exports.previewDataset = async (req, res) => {
       return res.status(404).json({ message: "Dataset not found" });
     }
 
-    const filePath = dataset.filePath;
+    // 🔥 IMPORTANT FIX
+    const fullPath = path.join(UPLOAD_DIR, dataset.filePath);
 
-    if (!fs.existsSync(filePath)) {
+    console.log("📁 Preview path:", fullPath);
+    console.log("📁 Exists:", fs.existsSync(fullPath));
+
+    if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
         message: "File not found on server",
       });
@@ -153,7 +193,7 @@ exports.previewDataset = async (req, res) => {
     const results = [];
     let count = 0;
 
-    fs.createReadStream(filePath)
+    fs.createReadStream(fullPath)
       .pipe(csv())
       .on("data", (data) => {
         if (count < 10) {
@@ -168,8 +208,10 @@ exports.previewDataset = async (req, res) => {
           previewRows: results,
         });
       });
+
   } catch (error) {
     console.error(error);
+
     res.status(500).json({ message: "Server error" });
   }
 };

@@ -1,11 +1,17 @@
 const axios = require("axios");
 const Model = require("../models/Model");
+const Dataset = require("../models/Dataset");
 const FormData = require("form-data");
+const fs = require("fs");
+const path = require("path");
 
-// 🚀 TRAIN MODEL API (STREAM FILE DIRECTLY)
+// 📁 Upload folder
+const UPLOAD_DIR = path.join(__dirname, "../uploads");
+
+// 🚀 TRAIN MODEL API
 exports.trainModel = async (req, res) => {
   try {
-    const { model_type } = req.body;
+    const { datasetId, model_type } = req.body;
     let { features, target } = req.body;
 
     console.log("📥 RAW BODY:", req.body);
@@ -13,15 +19,9 @@ exports.trainModel = async (req, res) => {
     // ============================
     // ✅ VALIDATION
     // ============================
-    if (!model_type) {
+    if (!datasetId || !model_type) {
       return res.status(400).json({
-        message: "model_type is required",
-      });
-    }
-
-    if (!req.file) {
-      return res.status(400).json({
-        message: "Dataset file is required",
+        message: "datasetId and model_type are required",
       });
     }
 
@@ -46,11 +46,48 @@ exports.trainModel = async (req, res) => {
     }
 
     // ============================
+    // ✅ GET DATASET
+    // ============================
+    const dataset = await Dataset.findById(datasetId);
+
+    if (!dataset) {
+      return res.status(404).json({
+        message: "Dataset not found",
+      });
+    }
+
+    // 🔥 Construct full path
+    const fullPath = path.join(UPLOAD_DIR, dataset.filePath);
+
+    console.log("📁 FILE PATH:", fullPath);
+    console.log("📁 EXISTS:", fs.existsSync(fullPath));
+
+    if (!fs.existsSync(fullPath)) {
+      return res.status(400).json({
+        message: "Dataset file not found on server",
+      });
+    }
+
+    // ============================
+    // ❌ PREVENT DUPLICATE MODEL
+    // ============================
+    const existing = await Model.findOne({
+      datasetId,
+      modelType: model_type,
+    });
+
+    if (existing) {
+      return res.status(400).json({
+        message: "Model already trained for this dataset",
+      });
+    }
+
+    // ============================
     // 🔥 SEND FILE TO ML SERVICE
     // ============================
     const formData = new FormData();
 
-    formData.append("file", req.file.buffer, req.file.originalname);
+    formData.append("file", fs.createReadStream(fullPath));
     formData.append("model_type", model_type);
 
     if (features) {
@@ -62,15 +99,14 @@ exports.trainModel = async (req, res) => {
     }
 
     const ML_URL = `${process.env.ML_API_URL}/train`;
-    console.log("🚀 Sending file to ML:", ML_URL);
+
+    console.log("🚀 Sending to ML:", ML_URL);
 
     const response = await axios.post(ML_URL, formData, {
-      headers: {
-        ...formData.getHeaders(),
-      },
+      headers: formData.getHeaders(),
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
-      timeout: 180000, // 🔥 important for Render
+      timeout: 180000,
     });
 
     console.log("✅ ML RESPONSE:", response.data);
@@ -86,7 +122,7 @@ exports.trainModel = async (req, res) => {
     }
 
     // ============================
-    // 📊 EXTRACT METRICS
+    // 📊 METRICS
     // ============================
     const accuracy =
       response.data?.metrics?.accuracy ??
@@ -94,9 +130,10 @@ exports.trainModel = async (req, res) => {
       null;
 
     // ============================
-    // 💾 SAVE MODEL METADATA
+    // 💾 SAVE MODEL
     // ============================
     const model = new Model({
+      datasetId,
       modelType: model_type,
       accuracy,
     });
@@ -123,10 +160,13 @@ exports.trainModel = async (req, res) => {
   }
 };
 
-// 🔥 GET MODELS
+
+// 🔥 GET MODELS BY DATASET
 exports.getModelByDataset = async (req, res) => {
   try {
-    const models = await Model.find();
+    const { datasetId } = req.params;
+
+    const models = await Model.find({ datasetId });
 
     if (!models.length) {
       return res.status(404).json({

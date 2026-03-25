@@ -8,32 +8,36 @@ const path = require("path");
 // 🚀 TRAIN MODEL API
 exports.trainModel = async (req, res) => {
   try {
-    let { datasetId, model_type, features, target } = req.body;
+    const { datasetId, model_type } = req.body;
+    let features = req.body.features;
+    const target = req.body.target;
 
     console.log("RAW BODY:", req.body);
 
-    // ✅ FIX: string → array
-    if (typeof features === "string") {
-      try {
-        features = JSON.parse(features);
-      } catch {
+    // ✅ Validate basic fields
+    if (!datasetId || !model_type) {
+      return res.status(400).json({
+        message: "datasetId and model_type are required"
+      });
+    }
+
+    // ✅ Parse features safely (optional)
+    if (features) {
+      if (typeof features === "string") {
+        try {
+          features = JSON.parse(features);
+        } catch {
+          return res.status(400).json({
+            message: "Invalid features format"
+          });
+        }
+      }
+
+      if (!Array.isArray(features)) {
         return res.status(400).json({
-          message: "Invalid features format"
+          message: "Features must be an array"
         });
       }
-    }
-
-    // ✅ Validate
-    if (!datasetId || !model_type || !features || !target) {
-      return res.status(400).json({
-        message: "All fields are required"
-      });
-    }
-
-    if (!Array.isArray(features) || features.length === 0) {
-      return res.status(400).json({
-        message: "Features must be a non-empty array"
-      });
     }
 
     // ✅ Get dataset
@@ -51,9 +55,7 @@ exports.trainModel = async (req, res) => {
       dataset.filePath
     );
 
-    console.log("DATASET PATH FROM DB:", dataset.filePath);
-    console.log("FULL PATH:", fullPath);
-    console.log("FILE EXISTS:", fs.existsSync(fullPath));
+    console.log("📁 DATASET PATH:", fullPath);
 
     if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
@@ -61,7 +63,7 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // ✅ Prevent duplicate
+    // ✅ Prevent duplicate model
     const existing = await Model.findOne({
       datasetId,
       modelType: model_type
@@ -73,15 +75,23 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // ✅ FormData
+    // ============================
+    // 🔥 SEND TO ML SERVICE
+    // ============================
     const formData = new FormData();
 
     formData.append("file", fs.createReadStream(fullPath));
     formData.append("model_type", model_type);
-    formData.append("features", JSON.stringify(features));
-    formData.append("target", target);
 
-    console.log("Sending request to ML API...");
+    if (features) {
+      formData.append("features", JSON.stringify(features));
+    }
+
+    if (target) {
+      formData.append("target", target);
+    }
+
+    console.log("🚀 Sending request to ML API...");
 
     const response = await axios.post(
       `${process.env.ML_API_URL}/train`,
@@ -94,20 +104,24 @@ exports.trainModel = async (req, res) => {
       }
     );
 
-    console.log("ML RESPONSE:", response.data);
+    console.log("✅ ML RESPONSE:", response.data);
 
+    // ❌ Handle ML error
     if (response.data?.error) {
       return res.status(400).json({
         message: "ML error",
-        error: response.data.error
+        error: response.data.error,
+        details: response.data
       });
     }
 
+    // ✅ Extract accuracy safely
     const accuracy =
-      response.data?.accuracy ??
-      response.data?.r2_score ??
+      response.data?.metrics?.accuracy ??
+      response.data?.metrics?.r2_score ??
       null;
 
+    // 💾 Save model metadata
     const model = new Model({
       datasetId,
       modelType: model_type,
@@ -116,25 +130,23 @@ exports.trainModel = async (req, res) => {
 
     await model.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       message: "Model trained successfully",
       model,
       mlResponse: response.data
     });
 
   } catch (error) {
-
-    console.error("FULL ERROR:", {
+    console.error("❌ FULL ERROR:", {
       message: error.message,
       status: error.response?.status,
       data: error.response?.data
     });
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "ML service error",
       error: error.response?.data || error.message
     });
-
   }
 };
 
@@ -152,18 +164,16 @@ exports.getModelByDataset = async (req, res) => {
       });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "Models fetched successfully",
       models
     });
 
   } catch (error) {
-
     console.error("Get Model Error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error"
     });
-
   }
 };

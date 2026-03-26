@@ -5,9 +5,6 @@ const FormData = require("form-data");
 const fs = require("fs");
 const path = require("path");
 
-// 📁 Upload folder
-const UPLOAD_DIR = path.join(__dirname, "../uploads");
-
 // 🚀 TRAIN MODEL API
 exports.trainModel = async (req, res) => {
   try {
@@ -56,18 +53,31 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    const fullPath = path.join(UPLOAD_DIR, dataset.filePath);
+    // 🔥 FIX 1: SAFE PATH RESOLUTION
+    const fullPath = path.resolve(dataset.filePath);
 
-    console.log("📁 FILE PATH:", fullPath);
+    console.log("📁 FINAL PATH:", fullPath);
 
     if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
-        message: "Dataset file not found on server",
+        message: "Dataset file not found",
+        debug: {
+          storedPath: dataset.filePath,
+          resolvedPath: fullPath,
+        },
       });
     }
 
-    // 🔥 EXTRA DEBUG (IMPORTANT)
-    console.log("📦 File size:", fs.statSync(fullPath).size);
+    // 🔥 FIX 2: CHECK EMPTY FILE
+    const stats = fs.statSync(fullPath);
+
+    console.log("📦 FILE SIZE:", stats.size);
+
+    if (stats.size === 0) {
+      return res.status(400).json({
+        message: "Dataset file is empty",
+      });
+    }
 
     // ============================
     // ❌ PREVENT DUPLICATE MODEL
@@ -88,11 +98,12 @@ exports.trainModel = async (req, res) => {
     // ============================
     const formData = new FormData();
 
-    const fileStream = fs.createReadStream(fullPath);
-    const stats = fs.statSync(fullPath);
-
-    // ✅ Append file with filename (IMPORTANT for FastAPI)
-    formData.append("file", fileStream, path.basename(fullPath));
+    // ✅ CLEAN FILE STREAM
+    formData.append(
+      "file",
+      fs.createReadStream(fullPath),
+      path.basename(fullPath)
+    );
 
     formData.append("model_type", model_type);
 
@@ -107,9 +118,8 @@ exports.trainModel = async (req, res) => {
     const ML_URL = `${process.env.ML_API_URL}/train`;
 
     console.log("🚀 Sending to ML:", ML_URL);
-    console.log("📦 File size:", stats.size);
 
-    // 🔥 VERY IMPORTANT: use getLength (async safe)
+    // ✅ SAFE content-length
     const contentLength = await new Promise((resolve, reject) => {
       formData.getLength((err, length) => {
         if (err) reject(err);

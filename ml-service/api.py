@@ -214,37 +214,30 @@ async def run_simulation(requests: List[Dict[str, float]]):
     """This route is added so your existing Node.js /api/simulations/run call works without changing the URL."""
     return simulate(requests)
 
+# ==============================
+# INSIGHTS ENDPOINTS
+# ==============================
 
-# ==============================
-# INSIGHTS ENDPOINT (Fixed + Robust)
-# ==============================
 @app.post("/insights")
 async def get_insights(file: UploadFile = File(...)):
+    """Plain insights endpoint without dataset_id"""
     try:
-        # Important: Reset file pointer (common FastAPI + pandas gotcha)
         await file.seek(0)
-
-        # Read CSV directly
         df = pd.read_csv(file.file)
 
         if df.empty:
             raise HTTPException(status_code=400, detail="Uploaded CSV file is empty")
 
-        # Clean column names
         df.columns = df.columns.str.strip()
-
-        # Generate insights using your existing function
         insights_result = generate_insights_from_df(df)
 
         return {
             "status": "success",
             "shape": df.shape,
             "columns": list(df.columns),
-            "insights": insights_result   # whatever your function returns
+            "insights": insights_result
         }
 
-    except pd.errors.EmptyDataError:
-        raise HTTPException(status_code=400, detail="The uploaded file is empty or not a valid CSV")
     except Exception as e:
         print("❌ INSIGHTS ERROR:", str(e))
         print(traceback.format_exc())
@@ -252,11 +245,43 @@ async def get_insights(file: UploadFile = File(...)):
 
 
 # ==============================
-# COMPATIBILITY ROUTE FOR YOUR NODE.JS
+# MAIN ROUTE FOR NODE.JS (Critical)
 # ==============================
+@app.post("/api/insights/{dataset_id}")
+async def generate_insights_for_dataset(
+    dataset_id: str,
+    file: UploadFile = File(...)
+):
+    """This exact route is used by your Node.js controller"""
+    try:
+        print(f"📊 Generating insights for dataset: {dataset_id}")
+
+        await file.seek(0)
+        df = pd.read_csv(file.file)
+
+        if df.empty:
+            raise HTTPException(status_code=400, detail="Uploaded CSV file is empty")
+
+        df.columns = df.columns.str.strip()
+        insights_result = generate_insights_from_df(df)
+
+        return {
+            "status": "success",
+            "dataset_id": dataset_id,
+            "shape": df.shape,
+            "columns": list(df.columns),
+            "insights": insights_result
+        }
+
+    except Exception as e:
+        print(f"❌ INSIGHTS ERROR for dataset {dataset_id}:", str(e))
+        print(traceback.format_exc())
+        raise HTTPException(status_code=400, detail=f"Failed to generate insights: {str(e)}")
+
+
 @app.post("/api/insights")
 async def get_insights_api(file: UploadFile = File(...)):
-    """This makes your current Node.js call to /api/insights work without any change"""
+    print("⚠️ Called /api/insights without dataset_id")
     return await get_insights(file)
 
 

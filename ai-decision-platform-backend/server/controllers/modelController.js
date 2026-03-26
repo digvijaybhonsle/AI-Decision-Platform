@@ -54,7 +54,7 @@ exports.trainModel = async (req, res) => {
     }
 
     // 🔥 FIX 1: SAFE PATH RESOLUTION
-    const fullPath = path.resolve(dataset.filePath);
+    const fullPath = path.join(__dirname, "../uploads", dataset.filePath);
 
     console.log("📁 FINAL PATH:", fullPath);
 
@@ -68,7 +68,6 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // 🔥 FIX 2: CHECK EMPTY FILE
     const stats = fs.statSync(fullPath);
 
     console.log("📦 FILE SIZE:", stats.size);
@@ -102,7 +101,7 @@ exports.trainModel = async (req, res) => {
     formData.append(
       "file",
       fs.createReadStream(fullPath),
-      path.basename(fullPath)
+      path.basename(fullPath),
     );
 
     formData.append("model_type", model_type);

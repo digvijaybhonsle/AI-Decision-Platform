@@ -88,14 +88,11 @@ exports.trainModel = async (req, res) => {
     // ============================
     const formData = new FormData();
 
-    // ✅ create stream + size
     const fileStream = fs.createReadStream(fullPath);
     const stats = fs.statSync(fullPath);
 
-    // 🔥 IMPORTANT: include knownLength
-    formData.append("file", fileStream, {
-      knownLength: stats.size,
-    });
+    // ✅ Append file with filename (IMPORTANT for FastAPI)
+    formData.append("file", fileStream, path.basename(fullPath));
 
     formData.append("model_type", model_type);
 
@@ -112,11 +109,18 @@ exports.trainModel = async (req, res) => {
     console.log("🚀 Sending to ML:", ML_URL);
     console.log("📦 File size:", stats.size);
 
-    // 🔥 IMPORTANT: include Content-Length
+    // 🔥 VERY IMPORTANT: use getLength (async safe)
+    const contentLength = await new Promise((resolve, reject) => {
+      formData.getLength((err, length) => {
+        if (err) reject(err);
+        else resolve(length);
+      });
+    });
+
     const response = await axios.post(ML_URL, formData, {
       headers: {
         ...formData.getHeaders(),
-        "Content-Length": formData.getLengthSync(),
+        "Content-Length": contentLength,
       },
       maxContentLength: Infinity,
       maxBodyLength: Infinity,

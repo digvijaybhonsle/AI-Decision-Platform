@@ -28,7 +28,7 @@ exports.generateInsights = async (req, res) => {
     }
 
     // ============================
-    // ✅ CHECK MODEL (IMPORTANT)
+    // ✅ CHECK MODEL
     // ============================
     const model = await Model.findOne({ datasetId });
 
@@ -39,37 +39,64 @@ exports.generateInsights = async (req, res) => {
     }
 
     // ============================
-    // 📁 BUILD FILE PATH
+    // 📁 BUILD FILE PATH (FIXED)
     // ============================
-    const fullPath = path.join(UPLOAD_DIR, dataset.filePath);
+    const fullPath = path.join(
+      __dirname,
+      "../uploads",
+      dataset.filePath
+    );
 
     console.log("📁 FILE PATH:", fullPath);
-    console.log("📁 EXISTS:", fs.existsSync(fullPath));
 
     if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
         message: "Dataset file not found on server",
+        path: fullPath
       });
     }
+
+    const stats = fs.statSync(fullPath);
+
+    if (stats.size === 0) {
+      return res.status(400).json({
+        message: "Dataset file is empty"
+      });
+    }
+
+    console.log("📦 FILE SIZE:", stats.size);
 
     // ============================
     // 🔥 SEND FILE TO ML SERVICE
     // ============================
     const formData = new FormData();
 
-    formData.append("file", fs.createReadStream(fullPath), {
-      filename: path.basename(fullPath),
-      contentType: "text/csv",
-    });
+    // ✅ CLEAN stream (no contentType)
+    formData.append(
+      "file",
+      fs.createReadStream(fullPath),
+      path.basename(fullPath)
+    );
 
     const ML_URL = `${process.env.ML_API_URL}/insights`;
 
     console.log("🚀 Sending to ML:", ML_URL);
 
+    // ✅ SAFE content-length
+    const contentLength = await new Promise((resolve, reject) => {
+      formData.getLength((err, length) => {
+        if (err) reject(err);
+        else resolve(length);
+      });
+    });
+
     const response = await axios.post(ML_URL, formData, {
       headers: {
         ...formData.getHeaders(),
+        "Content-Length": contentLength,
       },
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
       timeout: 180000,
     });
 
@@ -88,7 +115,7 @@ exports.generateInsights = async (req, res) => {
     }
 
     // ============================
-    // 💾 SAVE INSIGHTS
+    // 💾 SAVE INSIGHTS (SAFE)
     // ============================
     const insight = new Insight({
       datasetId: dataset._id,
@@ -96,6 +123,7 @@ exports.generateInsights = async (req, res) => {
       trend: mlData.trend || [],
       distribution: mlData.distribution || {},
       recommendations: mlData.recommendations || [],
+      raw: mlData // 🔥 keep full response (best practice)
     });
 
     await insight.save();
@@ -105,6 +133,7 @@ exports.generateInsights = async (req, res) => {
       insight,
       mlResponse: mlData,
     });
+
   } catch (error) {
     console.error("❌ Insight Error:", {
       message: error.message,

@@ -13,9 +13,15 @@ exports.runSimulation = async (req, res) => {
     // ============================
     // ✅ VALIDATION
     // ============================
-    if (!datasetId || !Array.isArray(inputs) || inputs.length === 0) {
+    if (!datasetId) {
       return res.status(400).json({
-        message: "datasetId and non-empty inputs array are required"
+        message: "datasetId is required",
+      });
+    }
+
+    if (!Array.isArray(inputs) || inputs.length === 0) {
+      return res.status(400).json({
+        message: "inputs must be a non-empty array",
       });
     }
 
@@ -26,7 +32,7 @@ exports.runSimulation = async (req, res) => {
 
     if (!dataset) {
       return res.status(404).json({
-        message: "Dataset not found"
+        message: "Dataset not found",
       });
     }
 
@@ -37,56 +43,61 @@ exports.runSimulation = async (req, res) => {
 
     if (!model) {
       return res.status(400).json({
-        message: "Model not trained for this dataset"
+        message: "Model not trained for this dataset",
       });
     }
 
     // ============================
-    // 🔥 CALL ML SERVICE
+    // 🔥 CALL ML SERVICE (FIXED)
     // ============================
     const ML_URL = `${process.env.ML_API_URL}/simulate`;
 
+    console.log("🚀 Sending to ML:", inputs);
+
     const response = await axios.post(
       ML_URL,
-      {
-        inputs: inputs   // 🔥 IMPORTANT (match ML API)
-      },
+      inputs, // ✅ FIXED: send array directly
       {
         headers: {
-          "Content-Type": "application/json"
+          "Content-Type": "application/json",
         },
-        timeout: 180000
-      }
+        timeout: 180000,
+      },
     );
 
-    console.log("✅ ML RESPONSE:", response.data);
+    const mlData = response.data;
 
-    const results = response.data;
+    console.log("✅ ML RESPONSE:", mlData);
 
     // ============================
     // ❌ HANDLE ML ERROR
     // ============================
-    if (!results || results.error) {
+    if (!mlData || mlData.error) {
       return res.status(400).json({
         message: "ML error",
-        error: results
+        error: mlData,
       });
     }
+
+    // ============================
+    // ✅ EXTRACT RESULTS (FIXED)
+    // ============================
+    const results = mlData.results;
 
     if (!Array.isArray(results)) {
       return res.status(500).json({
         message: "Invalid response from ML service",
-        data: results
+        data: mlData,
       });
     }
 
     // ============================
     // 💾 SAVE SIMULATIONS
     // ============================
-    const simulationsToSave = results.map(item => ({
+    const simulationsToSave = results.map((item) => ({
       datasetId,
       inputValues: item.input,
-      predictedRevenue: item.prediction
+      predictedRevenue: item.prediction,
     }));
 
     const savedSimulations = await Simulation.insertMany(simulationsToSave);
@@ -94,19 +105,19 @@ exports.runSimulation = async (req, res) => {
     return res.status(200).json({
       message: "Simulation completed successfully",
       count: savedSimulations.length,
-      results: savedSimulations
+      results: savedSimulations,
+      mlResponse: mlData,
     });
-
   } catch (error) {
     console.error("❌ Simulation Error:", {
       message: error.message,
       status: error.response?.status,
-      data: error.response?.data
+      data: error.response?.data,
     });
 
     return res.status(500).json({
       message: "ML service error",
-      error: error.response?.data || error.message
+      error: error.response?.data || error.message,
     });
   }
 };

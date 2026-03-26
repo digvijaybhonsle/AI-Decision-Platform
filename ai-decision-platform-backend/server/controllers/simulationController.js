@@ -2,6 +2,7 @@ const axios = require("axios");
 const Simulation = require("../models/Simulation");
 const Dataset = require("../models/Dataset");
 const Model = require("../models/Model");
+console.log("🔥 runSimulation hit");
 
 // 🚀 RUN SIMULATION
 exports.runSimulation = async (req, res) => {

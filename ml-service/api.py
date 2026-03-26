@@ -67,8 +67,6 @@ import pandas as pd
 import os, json, time, joblib, traceback
 from typing import Dict
 
-app = FastAPI()
-
 @app.post("/train")
 async def train(
     file: UploadFile = File(...),

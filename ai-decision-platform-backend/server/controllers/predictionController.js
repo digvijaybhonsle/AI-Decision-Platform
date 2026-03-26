@@ -13,9 +13,19 @@ exports.runPrediction = async (req, res) => {
     // ============================
     // ✅ VALIDATION
     // ============================
-    if (!datasetId || !inputValues || typeof inputValues !== "object") {
+    if (!datasetId) {
       return res.status(400).json({
-        message: "datasetId and valid inputValues object are required"
+        message: "datasetId is required"
+      });
+    }
+
+    if (
+      !inputValues ||
+      typeof inputValues !== "object" ||
+      Array.isArray(inputValues)
+    ) {
+      return res.status(400).json({
+        message: "inputValues must be a valid object"
       });
     }
 
@@ -42,15 +52,15 @@ exports.runPrediction = async (req, res) => {
     }
 
     // ============================
-    // 🔥 CALL ML SERVICE
+    // 🔥 CALL ML SERVICE (FIXED)
     // ============================
     const ML_URL = `${process.env.ML_API_URL}/predict`;
 
+    console.log("🚀 Sending to ML:", inputValues);
+
     const response = await axios.post(
       ML_URL,
-      {
-        input: inputValues   // 🔥 IMPORTANT (match ML API)
-      },
+      inputValues,   // ✅ FIXED (NO "input" wrapper)
       {
         headers: {
           "Content-Type": "application/json"
@@ -74,7 +84,7 @@ exports.runPrediction = async (req, res) => {
     }
 
     // ============================
-    // ✅ EXTRACT PREDICTION
+    // ✅ EXTRACT PREDICTION (SAFE)
     // ============================
     const predictedValue =
       mlData.prediction ??

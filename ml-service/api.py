@@ -216,15 +216,48 @@ async def run_simulation(requests: List[Dict[str, float]]):
 
 
 # ==============================
-# OTHER ENDPOINTS
+# INSIGHTS ENDPOINT (Fixed + Robust)
 # ==============================
 @app.post("/insights")
-async def insights(file: UploadFile = File(...)):
+async def get_insights(file: UploadFile = File(...)):
     try:
+        # Important: Reset file pointer (common FastAPI + pandas gotcha)
+        await file.seek(0)
+
+        # Read CSV directly
         df = pd.read_csv(file.file)
-        return generate_insights_from_df(df)
+
+        if df.empty:
+            raise HTTPException(status_code=400, detail="Uploaded CSV file is empty")
+
+        # Clean column names
+        df.columns = df.columns.str.strip()
+
+        # Generate insights using your existing function
+        insights_result = generate_insights_from_df(df)
+
+        return {
+            "status": "success",
+            "shape": df.shape,
+            "columns": list(df.columns),
+            "insights": insights_result   # whatever your function returns
+        }
+
+    except pd.errors.EmptyDataError:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty or not a valid CSV")
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to process file: {str(e)}")
+        print("❌ INSIGHTS ERROR:", str(e))
+        print(traceback.format_exc())
+        raise HTTPException(status_code=400, detail=f"Failed to process CSV: {str(e)}")
+
+
+# ==============================
+# COMPATIBILITY ROUTE FOR YOUR NODE.JS
+# ==============================
+@app.post("/api/insights")
+async def get_insights_api(file: UploadFile = File(...)):
+    """This makes your current Node.js call to /api/insights work without any change"""
+    return await get_insights(file)
 
 
 @app.get("/feature-importance")

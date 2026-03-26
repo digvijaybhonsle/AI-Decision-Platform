@@ -1,4 +1,6 @@
+import asyncio
 import traceback
+import uuid
 from fastapi import FastAPI, UploadFile, File, Form
 from pydantic import BaseModel
 import joblib
@@ -78,10 +80,12 @@ async def train(
 
     try:
         # ============================
-        # 📂 SAVE FILE
+        # 📂 SAVE FILE (UNIQUE NAME)
         # ============================
-        file_path = os.path.join(DATASET_DIR, file.filename)
+        unique_name = f"{uuid.uuid4()}_{file.filename}"
+        file_path = os.path.join(DATASET_DIR, unique_name)
 
+        # ✅ stream-safe read
         content = await file.read()
 
         if not content:
@@ -90,15 +94,15 @@ async def train(
         with open(file_path, "wb") as buffer:
             buffer.write(content)
 
-        print("📁 File received:", file.filename)
-        print("📦 File size:", len(content))
+        print("📁 File saved:", file_path)
+        print("📦 Size:", len(content))
 
         # ============================
-        # 📊 LOAD CSV (SAFE)
+        # 📊 LOAD CSV (ROBUST)
         # ============================
         try:
             df = pd.read_csv(file_path, encoding="utf-8")
-        except Exception:
+        except:
             try:
                 df = pd.read_csv(file_path, encoding="latin1")
             except Exception as e:
@@ -107,15 +111,13 @@ async def train(
                     detail=f"CSV parsing failed: {str(e)}"
                 )
 
-        # ✅ Clean columns
+        # ✅ clean columns
         df.columns = df.columns.str.strip()
 
-        # ❌ Empty dataframe check
         if df.empty:
             raise HTTPException(status_code=400, detail="CSV has no data")
 
-        print("📊 Dataset shape:", df.shape)
-        print("📊 Columns:", df.columns.tolist())
+        print("📊 Shape:", df.shape)
 
         # ============================
         # 🔥 PARSE FEATURES
@@ -135,9 +137,15 @@ async def train(
         print("🎯 Target:", target)
 
         # ============================
-        # 🚀 TRAIN MODEL
+        # 🚀 TRAIN (NON-BLOCKING FIX)
         # ============================
-        result = train_model(df, model_type, features, target)
+        result = await asyncio.to_thread(
+            train_model,
+            df,
+            model_type,
+            features,
+            target
+        )
 
         if "error" in result:
             raise HTTPException(status_code=400, detail=result["error"])
@@ -147,7 +155,7 @@ async def train(
         # ============================
         timestamp = int(time.time())
 
-        model_filename = f"{model_type}_{result.get('target')}_{timestamp}.pkl"
+        model_filename = f"{model_type}_{timestamp}.pkl"
         model_file_path = os.path.join(MODEL_DIR, model_filename)
 
         joblib.dump({
@@ -159,9 +167,19 @@ async def train(
 
         print("💾 Model saved:", model_file_path)
 
-        # 🔥 Load in memory
+        # ============================
+        # 🔥 LOAD INTO MEMORY
+        # ============================
         model = result.get("model_obj")
         current_model_file = model_file_path
+
+        # ============================
+        # 🧹 CLEANUP FILE (IMPORTANT)
+        # ============================
+        try:
+            os.remove(file_path)
+        except:
+            pass
 
         return {
             "status": "success",
@@ -177,18 +195,16 @@ async def train(
         }
 
     except HTTPException as e:
-        # ✅ Controlled error (NO 502)
         return {"error": e.detail}
 
     except Exception as e:
-        print("❌ ERROR:", str(e))
+        print("❌ TRAIN ERROR:", str(e))
         print(traceback.format_exc())
 
         return {
             "error": str(e),
             "trace": traceback.format_exc()
         }
-
 
 # ============================
 # 🔮 PREDICT API (SAFE)

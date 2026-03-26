@@ -55,16 +55,14 @@ exports.runSimulation = async (req, res) => {
 
     console.log("🚀 Sending to ML:", inputs);
 
-    const response = await axios.post(
-      ML_URL,
-      inputs, // ✅ FIXED: send array directly
-      {
-        headers: {
-          "Content-Type": "application/json",
-        },
-        timeout: 180000,
+    const cleanInputs = Array.isArray(inputs) ? inputs : inputs.inputs;
+
+    const response = await axios.post(ML_URL, cleanInputs, {
+      headers: {
+        "Content-Type": "application/json",
       },
-    );
+      timeout: 180000,
+    });
 
     const mlData = response.data;
 

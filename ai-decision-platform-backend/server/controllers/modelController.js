@@ -66,6 +66,9 @@ exports.trainModel = async (req, res) => {
       });
     }
 
+    // 🔥 EXTRA DEBUG (IMPORTANT)
+    console.log("📦 File size:", fs.statSync(fullPath).size);
+
     // ============================
     // ❌ PREVENT DUPLICATE MODEL
     // ============================
@@ -85,13 +88,9 @@ exports.trainModel = async (req, res) => {
     // ============================
     const formData = new FormData();
 
-    // ✅ FIX: use stream instead of buffer
+    // ✅ CRITICAL FIX: clean stream (NO extra config)
     const fileStream = fs.createReadStream(fullPath);
-
-    formData.append("file", fileStream, {
-      filename: path.basename(fullPath),
-      contentType: "text/csv",
-    });
+    formData.append("file", fileStream);
 
     formData.append("model_type", model_type);
 

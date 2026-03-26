@@ -60,6 +60,13 @@ model = None
 current_model_file = None
 
 
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+import pandas as pd
+import os, json, time, joblib, traceback
+from typing import Dict
+
+app = FastAPI()
+
 @app.post("/train")
 async def train(
     file: UploadFile = File(...),
@@ -70,45 +77,76 @@ async def train(
     global model, current_model_file
 
     try:
-        # 📂 Save uploaded file
+        # ============================
+        # 📂 SAVE FILE
+        # ============================
         file_path = os.path.join(DATASET_DIR, file.filename)
 
+        content = await file.read()
+
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty")
+
         with open(file_path, "wb") as buffer:
-            buffer.write(await file.read())
+            buffer.write(content)
 
         print("📁 File received:", file.filename)
+        print("📦 File size:", len(content))
 
-        # 📊 Load dataset
-        df = pd.read_csv(file_path)
+        # ============================
+        # 📊 LOAD CSV (SAFE)
+        # ============================
+        try:
+            df = pd.read_csv(file_path, encoding="utf-8")
+        except Exception:
+            try:
+                df = pd.read_csv(file_path, encoding="latin1")
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"CSV parsing failed: {str(e)}"
+                )
+
+        # ✅ Clean columns
         df.columns = df.columns.str.strip()
 
-        print("📊 Dataset shape:", df.shape)
+        # ❌ Empty dataframe check
+        if df.empty:
+            raise HTTPException(status_code=400, detail="CSV has no data")
 
-        # 🔥 Parse features JSON safely
+        print("📊 Dataset shape:", df.shape)
+        print("📊 Columns:", df.columns.tolist())
+
+        # ============================
+        # 🔥 PARSE FEATURES
+        # ============================
         if features:
             try:
                 features = json.loads(features)
-            except:
-                return {"error": "Invalid features format"}
+                if not isinstance(features, list):
+                    raise ValueError("Features must be array")
+            except Exception as e:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid features format: {str(e)}"
+                )
 
         print("📊 Features:", features)
         print("🎯 Target:", target)
 
-        # 🚀 Train model
-        result = train_model(
-            df,
-            model_type,
-            features,
-            target
-        )
+        # ============================
+        # 🚀 TRAIN MODEL
+        # ============================
+        result = train_model(df, model_type, features, target)
 
         if "error" in result:
-            return result
+            raise HTTPException(status_code=400, detail=result["error"])
 
-        # ⏱ Timestamp
+        # ============================
+        # 💾 SAVE MODEL
+        # ============================
         timestamp = int(time.time())
 
-        # 💾 Save model
         model_filename = f"{model_type}_{result.get('target')}_{timestamp}.pkl"
         model_file_path = os.path.join(MODEL_DIR, model_filename)
 
@@ -121,7 +159,7 @@ async def train(
 
         print("💾 Model saved:", model_file_path)
 
-        # 🔥 Load into memory
+        # 🔥 Load in memory
         model = result.get("model_obj")
         current_model_file = model_file_path
 
@@ -138,8 +176,11 @@ async def train(
             "model_file": model_file_path
         }
 
+    except HTTPException as e:
+        # ✅ Controlled error (NO 502)
+        return {"error": e.detail}
+
     except Exception as e:
-        import traceback
         print("❌ ERROR:", str(e))
         print(traceback.format_exc())
 
@@ -147,26 +188,26 @@ async def train(
             "error": str(e),
             "trace": traceback.format_exc()
         }
-    
 
+
+# ============================
+# 🔮 PREDICT API (SAFE)
+# ============================
 @app.post("/predict")
 def predict(data: Dict[str, float]):
     global current_model_file
 
     try:
-        # ❌ No model check
         if current_model_file is None:
-            return {"error": "No model trained yet"}
+            raise HTTPException(status_code=400, detail="No model trained yet")
 
-        print("📥 Incoming prediction data:", data)
+        print("📥 Incoming data:", data)
         print("📁 Using model:", current_model_file)
 
-        # 🚀 Use improved prediction function
         result = predict_with_confidence(current_model_file, data)
 
-        # ❌ If error from prediction layer
         if "error" in result:
-            return result
+            raise HTTPException(status_code=400, detail=result["error"])
 
         return {
             "status": "success",
@@ -175,8 +216,10 @@ def predict(data: Dict[str, float]):
             "range": result["range"]
         }
 
+    except HTTPException as e:
+        return {"error": e.detail}
+
     except Exception as e:
-        import traceback
         print("❌ PREDICT ERROR:", str(e))
         print(traceback.format_exc())
 

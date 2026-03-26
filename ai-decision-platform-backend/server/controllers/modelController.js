@@ -88,9 +88,14 @@ exports.trainModel = async (req, res) => {
     // ============================
     const formData = new FormData();
 
-    // ✅ CRITICAL FIX: clean stream (NO extra config)
+    // ✅ create stream + size
     const fileStream = fs.createReadStream(fullPath);
-    formData.append("file", fileStream);
+    const stats = fs.statSync(fullPath);
+
+    // 🔥 IMPORTANT: include knownLength
+    formData.append("file", fileStream, {
+      knownLength: stats.size,
+    });
 
     formData.append("model_type", model_type);
 
@@ -105,10 +110,13 @@ exports.trainModel = async (req, res) => {
     const ML_URL = `${process.env.ML_API_URL}/train`;
 
     console.log("🚀 Sending to ML:", ML_URL);
+    console.log("📦 File size:", stats.size);
 
+    // 🔥 IMPORTANT: include Content-Length
     const response = await axios.post(ML_URL, formData, {
       headers: {
         ...formData.getHeaders(),
+        "Content-Length": formData.getLengthSync(),
       },
       maxContentLength: Infinity,
       maxBodyLength: Infinity,

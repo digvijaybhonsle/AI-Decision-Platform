@@ -3,8 +3,7 @@ const Prediction = require("../models/Prediction");
 const Dataset = require("../models/Dataset");
 const Model = require("../models/Model");
 
-
-// 🚀 RUN PREDICTION - FINAL ROBUST VERSION
+// 🚀 RUN PREDICTION - FINAL FIXED VERSION
 exports.runPrediction = async (req, res) => {
   try {
     const { datasetId, inputValues } = req.body;
@@ -33,20 +32,15 @@ exports.runPrediction = async (req, res) => {
     }
 
     // ============================
-    // 🔥 ADVANCED TARGET DETECTION
+    // 🔥 TARGET DETECTION
     // ============================
     let target = "";
 
-    // Priority 1: From Dataset document
     if (dataset.targetColumn) {
       target = dataset.targetColumn;
-    }
-    // Priority 2: From Trained Model document
-    else if (trainedModel.target) {
+    } else if (trainedModel.target) {
       target = trainedModel.target;
-    }
-    // Priority 3: Last column as fallback (common pattern)
-    else if (dataset.columns && dataset.columns.length > 0) {
+    } else if (dataset.columns?.length > 0) {
       target = dataset.columns[dataset.columns.length - 1];
     }
 
@@ -54,30 +48,32 @@ exports.runPrediction = async (req, res) => {
 
     const allColumns = dataset.columns || [];
 
-    // Filter out target column (very robust)
     const featureColumns = allColumns.filter((col) => {
       if (typeof col !== "string") return true;
       return col.trim().toLowerCase() !== target.toLowerCase();
     });
 
-    console.log(`🎯 Detected Target: "${target}"`);
-    console.log(`✅ Using Features (${featureColumns.length}):`, featureColumns);
+    console.log(`🎯 Target: ${target}`);
+    console.log(`✅ Features:`, featureColumns);
 
     // ============================
-    // 🔥 BUILD CLEANED INPUT
+    // 🔥 CLEAN INPUT (SAFE VERSION)
     // ============================
     const cleanedInput = {};
 
     featureColumns.forEach((col) => {
       let value = inputValues[col];
 
-      // Skip missing or empty values
-      if (value === undefined || value === "" || value === null) {
-        return;
+      if (value === undefined || value === null) return;
+
+      if (typeof value === "string") {
+        value = value.trim();
       }
 
-      // Convert to number if possible
-      if (!isNaN(value) && value !== "") {
+      if (value === "") return;
+
+      // safe conversion
+      if (!isNaN(Number(value))) {
         value = Number(value);
       }
 
@@ -85,9 +81,19 @@ exports.runPrediction = async (req, res) => {
     });
 
     // ============================
+    // ❗ REMOVE TARGET IF SENT
+    // ============================
+    if (cleanedInput[target] !== undefined) {
+      console.log(`⚠️ Removing target field "${target}" from input`);
+      delete cleanedInput[target];
+    }
+
+    // ============================
     // ✅ CHECK MISSING FIELDS
     // ============================
-    const missingFields = featureColumns.filter((col) => cleanedInput[col] === undefined);
+    const missingFields = featureColumns.filter(
+      (col) => cleanedInput[col] === undefined
+    );
 
     if (missingFields.length > 0) {
       return res.status(400).json({
@@ -95,13 +101,12 @@ exports.runPrediction = async (req, res) => {
         requiredFields: featureColumns,
         missingFields,
         targetColumn: target,
-        note: `Target column "${target}" should NOT be included in inputValues`,
-        hint: "Please remove the target column from your input form"
+        hint: "Fill all fields and DO NOT include target column",
       });
     }
 
     // ============================
-    // 🔥 CALL ML SERVICE
+    // 🚀 CALL ML SERVICE
     // ============================
     const ML_URL = `${process.env.ML_API_URL}/predict`;
 
@@ -113,16 +118,19 @@ exports.runPrediction = async (req, res) => {
       validateStatus: () => true,
     });
 
+    console.log("📡 ML STATUS:", response.status);
+    console.log("📡 ML RESPONSE:", response.data);
+
     const mlData = response.data;
 
     // ============================
-    // 🔥 ML RESPONSE HANDLING
+    // ❌ HANDLE ML ERRORS (IMPROVED)
     // ============================
     if (response.status >= 500) {
       return res.status(503).json({
         message: "ML service is temporarily unavailable",
         retry: true,
-        detail: mlData?.detail || "Internal ML server error",
+        detail: mlData?.detail || mlData?.error || "Internal ML error",
       });
     }
 
@@ -130,6 +138,7 @@ exports.runPrediction = async (req, res) => {
       return res.status(400).json({
         message: "Invalid prediction input",
         error: mlData?.detail || mlData?.error || mlData,
+        requiredFields: mlData?.required_features,
       });
     }
 
@@ -147,6 +156,9 @@ exports.runPrediction = async (req, res) => {
       });
     }
 
+    // ============================
+    // ✅ EXTRACT PREDICTION
+    // ============================
     const predictedValue = mlData.prediction ?? null;
 
     if (predictedValue === null) {
@@ -174,6 +186,8 @@ exports.runPrediction = async (req, res) => {
     // ============================
     return res.status(200).json({
       message: "Prediction generated successfully",
+      features: featureColumns,   // 🔥 ADD THIS (frontend fix)
+      target: target,             // 🔥 ADD THIS
       prediction: {
         _id: predictionRecord._id,
         datasetId,
@@ -184,15 +198,50 @@ exports.runPrediction = async (req, res) => {
         featuresUsed: mlData.features_used || featureColumns,
         modelType: mlData.model_type,
       },
-      mlResponse: mlData,
     });
 
   } catch (error) {
     console.error("❌ Prediction Controller Error:", error);
+
     return res.status(500).json({
       message: "Failed to process prediction",
-      error: error.response?.data?.detail || error.message || "Internal server error",
+      error: error.response?.data || error.message || "Internal server error",
     });
+  }
+};
+
+exports.getPredictionFeatures = async (req, res) => {
+  try {
+    const { datasetId } = req.params;
+
+    const dataset = await Dataset.findById(datasetId);
+    const model = await Model.findOne({ datasetId });
+
+    if (!dataset || !model) {
+      return res.status(404).json({
+        message: "Dataset or model not found"
+      });
+    }
+
+    let target =
+      dataset.targetColumn ||
+      model.target ||
+      dataset.columns[dataset.columns.length - 1];
+
+    const features = (dataset.columns || []).filter(
+      (col) =>
+        typeof col !== "string" ||
+        col.trim().toLowerCase() !== String(target).trim().toLowerCase()
+    );
+
+    return res.json({
+      features,
+      target
+    });
+
+  } catch (err) {
+    console.error("❌ Feature fetch error:", err);
+    res.status(500).json({ message: "Failed to fetch features" });
   }
 };
 

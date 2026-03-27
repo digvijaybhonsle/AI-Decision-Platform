@@ -9,6 +9,7 @@ from sklearn.linear_model import LinearRegression, LogisticRegression
 import joblib
 import os
 import time
+import traceback
 
 from preprocessing import preprocess_data
 
@@ -29,90 +30,84 @@ def train_model(df, model_type, features=None, target=None):
             return {"error": "Dataset is empty after preprocessing"}
 
         if df.shape[1] < 2:
-            return {"error": "Not enough columns"}
+            return {"error": "Not enough columns in dataset"}
 
         # ============================
-        # 🎯 TARGET
+        # 🎯 TARGET COLUMN
         # ============================
         if target is None:
             target = df.columns[-1]
 
         if target not in df.columns:
             return {
-                "error": f"Target '{target}' not found",
-                "available_columns": df.columns.tolist()
+                "error": f"Target column '{target}' not found in dataset",
+                "available_columns": list(df.columns)
             }
 
         # ============================
         # 🎯 FEATURES
         # ============================
-        if features is None:
+        if features is None or len(features) == 0:
             features = [col for col in df.columns if col != target]
 
         missing = [col for col in features if col not in df.columns]
         if missing:
-            return {"error": f"Missing features: {missing}"}
+            return {"error": f"Some features not found: {missing}"}
 
         if not features:
-            return {"error": "No valid features"}
+            return {"error": "No valid features available"}
 
         # ============================
-        # 📊 DATA PREP
+        # 📊 PREPARE DATA
         # ============================
         X = df[features]
         y = df[target]
 
         if len(X) < 10:
-            return {"error": "Not enough data"}
+            return {"error": "Not enough data points (minimum 10 required)"}
+
+        # Auto detect task type
+        is_classifier = y.nunique() <= 10   # heuristic
 
         # ============================
-        # 🔍 AUTO TASK DETECTION
-        # ============================
-        is_classifier = y.nunique() < 10
-
-        # ============================
-        # 🤖 MODEL SELECTION
+        # 🤖 SELECT MODEL
         # ============================
         if model_type == "random_forest":
-            model = (
-                RandomForestClassifier(n_estimators=200, random_state=42)
-                if is_classifier
-                else RandomForestRegressor(n_estimators=200, max_depth=15, random_state=42)
-            )
+            if is_classifier:
+                model = RandomForestClassifier(n_estimators=200, random_state=42)
+            else:
+                model = RandomForestRegressor(n_estimators=200, max_depth=15, random_state=42)
 
         elif model_type == "linear":
             if is_classifier:
-                return {"error": "Linear not valid for classification"}
+                return {"error": "Linear Regression not suitable for classification task"}
             model = LinearRegression()
 
         elif model_type == "logistic":
             if not is_classifier:
-                return {"error": "Logistic only for classification"}
-            model = LogisticRegression(max_iter=1000)
+                return {"error": "Logistic Regression only suitable for classification"}
+            model = LogisticRegression(max_iter=1000, random_state=42)
 
         else:
-            return {"error": "Invalid model type"}
+            return {"error": f"Unsupported model type: {model_type}. Use 'random_forest', 'linear', or 'logistic'"}
 
         # ============================
-        # 🔀 SPLIT
+        # 🔀 TRAIN-TEST SPLIT
         # ============================
         X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
+            X, y, test_size=0.2, random_state=42, stratify=y if is_classifier else None
         )
 
         # ============================
-        # 🚀 TRAIN
+        # 🚀 TRAIN MODEL
         # ============================
         model.fit(X_train, y_train)
 
         # ============================
-        # 📈 PREDICT
+        # 📈 EVALUATE
         # ============================
         y_pred = model.predict(X_test)
 
-        # ============================
-        # 📊 METRICS (PRO LEVEL)
-        # ============================
         if is_classifier:
             metrics = {
                 "accuracy": round(accuracy_score(y_test, y_pred), 4),
@@ -120,47 +115,52 @@ def train_model(df, model_type, features=None, target=None):
                 "recall": round(recall_score(y_test, y_pred, average="weighted", zero_division=0), 4),
             }
             task = "classification"
-
         else:
             mse = mean_squared_error(y_test, y_pred)
-            rmse = mse ** 0.5
-
             metrics = {
                 "r2_score": round(r2_score(y_test, y_pred), 4),
                 "mse": round(mse, 4),
-                "rmse": round(rmse, 4),
+                "rmse": round(mse ** 0.5, 4),
             }
             task = "regression"
 
         # ============================
         # 💾 SAVE MODEL
         # ============================
-        model_filename = f"{model_type}_{target}_{int(time.time())}.pkl"
+        timestamp = int(time.time())
+        model_filename = f"{model_type}_{target}_{timestamp}.pkl"
         model_path = os.path.join(MODEL_PATH, model_filename)
 
         joblib.dump({
-            "model": model,
+            "model": model,           # ← This is the actual trained model object
             "features": features,
             "target": target,
             "task": task,
-            "created_at": int(time.time())
+            "model_type": model_type,
+            "created_at": timestamp,
+            "metrics": metrics
         }, model_path)
 
+        print(f"✅ Model saved successfully: {model_path}")
+
         # ============================
-        # ✅ RESPONSE (CLEAN API)
+        # ✅ RETURN TO FASTAPI
         # ============================
         return {
+            "status": "success",
             "task": task,
             "model_type": model_type,
             "target": target,
             "features": features,
+            "model_obj": model,           # ← Important: Return the actual model object
             "model_path": model_path,
             "metrics": metrics
         }
 
     except Exception as e:
-        import traceback
+        print("❌ TRAIN MODEL ERROR:")
+        print(traceback.format_exc())
         return {
-            "error": str(e),
+            "error": f"Training failed: {str(e)}",
             "trace": traceback.format_exc()
         }

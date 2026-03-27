@@ -1,13 +1,13 @@
 import joblib
 import numpy as np
 import os
+import traceback
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "models")
 
 
 def load_model(model_file):
-    # ✅ Fix relative path issues
+    """Load model with robust path handling"""
     if not os.path.isabs(model_file):
         model_file = os.path.join(BASE_DIR, model_file)
 
@@ -16,108 +16,90 @@ def load_model(model_file):
 
     loaded = joblib.load(model_file)
 
-    # ✅ Validate structure
     if not isinstance(loaded, dict):
         raise ValueError("Invalid model file format")
 
     if "model" not in loaded or "features" not in loaded:
-        raise ValueError("Model file missing required keys")
+        raise ValueError("Model file missing required keys: 'model' or 'features'")
 
     return loaded
 
 
 def predict_with_confidence(model_file, input_data: dict):
-    """
-    model_file → path of saved model
-    input_data → dict of feature values
-    """
-
     try:
         loaded = load_model(model_file)
-
         model = loaded.get("model")
-        features = loaded.get("features")
-
-        # 🚨 FIX: Prevent NoneType error
-        if model is None:
-            return {"error": "Model is None. Training may have failed."}
+        features = loaded.get("features") or []
 
         if not features:
-            return {"error": "Features not found in model file"}
+            return {"error": "No features found in trained model"}
 
-        # ✅ Validate input
+        if not isinstance(features, list):
+            return {"error": "Features list is invalid"}
+
+        # ============================
+        # ✅ VALIDATION
+        # ============================
         missing = [f for f in features if f not in input_data]
         if missing:
-            return {"error": f"Missing features: {missing}"}
+            return {
+                "error": f"Missing required features: {missing}",
+                "required_features": features
+            }
 
-        # ✅ Convert safely to float
+        extra = [f for f in input_data if f not in features]
+        if extra:
+            print(f"Warning: Extra features ignored: {extra}")
+
+        # ============================
+        # 🔥 CONVERT TO CORRECT ORDER
+        # ============================
         try:
             values = [float(input_data[f]) for f in features]
-        except Exception:
-            return {"error": "Invalid input types. All features must be numeric"}
+        except (ValueError, TypeError) as e:
+            return {"error": f"Invalid numeric value for features: {str(e)}"}
 
         values = np.array(values).reshape(1, -1)
 
-        # ✅ Predict
+        # ============================
+        # ✅ MAKE PREDICTION
+        # ============================
         prediction = model.predict(values)[0]
 
         # ============================
-        # 🌲 RANDOM FOREST CASE
+        # 🌲 CONFIDENCE CALCULATION
         # ============================
-        if hasattr(model, "estimators_"):
+        if hasattr(model, "estimators_"):  # Tree-based models (RandomForest, etc.)
             try:
                 tree_predictions = np.array([
                     tree.predict(values)[0] for tree in model.estimators_
                 ])
-
                 std_dev = tree_predictions.std()
-
-                # Safe confidence calculation
-                if abs(prediction) > 1e-6:
-                    confidence = 1 - (std_dev / abs(prediction))
-                else:
-                    confidence = 0.5
-
-                confidence = max(0, min(1, confidence))
-
-                lower = prediction - std_dev
-                upper = prediction + std_dev
-
+                confidence = max(0.0, min(1.0, 1 - (std_dev / (abs(prediction) + 1e-8))))
+                lower = float(prediction - std_dev)
+                upper = float(prediction + std_dev)
             except Exception:
-                # fallback if estimator fails
-                std_dev = 0
-                confidence = 0.7
-                lower = prediction
-                upper = prediction
-
-        # ============================
-        # 📈 LINEAR / LOGISTIC CASE
-        # ============================
+                confidence = 0.75
+                lower = upper = float(prediction)
         else:
-            std_dev = 0
-            confidence = 0.8
-            lower = prediction
-            upper = prediction
+            # Linear models or others
+            confidence = 0.80
+            lower = upper = float(prediction)
 
         return {
             "prediction": float(prediction),
             "confidence": float(confidence),
-            "range": {
-                "min": float(lower),
-                "max": float(upper)
-            },
-            "features_used": features  # 🔥 helpful for debugging
+            "range": {"min": lower, "max": upper},
+            "features_used": features,           # ← This is what frontend needs
+            "model_type": type(model).__name__
         }
 
     except FileNotFoundError as e:
         return {"error": str(e)}
-
-    except ValueError as e:
-        return {"error": str(e)}
-
     except Exception as e:
-        import traceback
+        print("❌ Error in predict_with_confidence:")
+        print(traceback.format_exc())
         return {
-            "error": str(e),
+            "error": f"Prediction failed: {str(e)}",
             "trace": traceback.format_exc()
         }

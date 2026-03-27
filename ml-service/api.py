@@ -147,30 +147,52 @@ async def train(
 
 
 # ==============================
-# PREDICT & SIMULATE
+# PREDICT ENDPOINT (Final Version)
 # ==============================
 @app.post("/predict")
 def predict(data: Dict[str, float]):
     global current_model_file
 
-    if current_model_file is None:
-        raise HTTPException(status_code=400, detail="No model trained yet")
+    # Strong check for model availability
+    if current_model_file is None or not os.path.exists(current_model_file):
+        raise HTTPException(
+            status_code=400, 
+            detail={
+                "message": "No trained model available. Please train a model first.",
+                "has_model": False
+            }
+        )
 
     try:
         result = predict_with_confidence(current_model_file, data)
 
         if "error" in result:
-            raise HTTPException(status_code=400, detail=result["error"])
+            raise HTTPException(
+                status_code=400, 
+                detail={
+                    "message": result["error"],
+                    "required_features": result.get("required_features")
+                }
+            )
 
         return {
             "status": "success",
             "prediction": result["prediction"],
             "confidence": result["confidence"],
-            "range": result["range"]
+            "range": result["range"],
+            "features_used": result["features_used"],      # ← Critical for frontend
+            "model_type": result.get("model_type")
         }
+
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        print("❌ PREDICT ERROR:", str(e))
-        raise HTTPException(status_code=500, detail=str(e))
+        print("❌ PREDICT ENDPOINT ERROR:", str(e))
+        print(traceback.format_exc())
+        raise HTTPException(
+            status_code=500, 
+            detail="Internal prediction error. Please try again."
+        )
 
 
 @app.post("/simulate")
@@ -244,9 +266,6 @@ async def get_insights(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=f"Failed to process CSV: {str(e)}")
 
 
-# ==============================
-# MAIN ROUTE FOR NODE.JS (Critical)
-# ==============================
 # ==============================
 # MAIN ROUTE FOR NODE.JS
 # ==============================

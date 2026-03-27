@@ -15,7 +15,7 @@ def generate_insights_from_df(df):
 
         # convert possible numeric strings
         for col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="ignore")
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
         df = df.dropna()
 

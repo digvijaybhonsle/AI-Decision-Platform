@@ -10,7 +10,7 @@ import joblib
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List, Dict
+from typing import Any, List, Dict
 
 from predict import predict_with_confidence
 from insights import generate_insights_from_df
@@ -153,43 +153,77 @@ async def train(
 
 
 # ==============================
-# PREDICT ENDPOINT
+# PREDICT ENDPOINT (UPDATED)
 # ==============================
 @app.post("/predict")
-def predict(data: Dict[str, float]):
+def predict(data: Dict[str, Any]):   # 🔥 changed float → Any
     global current_model_file
 
+    print("📥 Incoming Prediction Request:", data)
+
+    # ============================
+    # ✅ CHECK MODEL
+    # ============================
     if current_model_file is None or not os.path.exists(current_model_file):
         raise HTTPException(
             status_code=400,
             detail="No trained model available. Please train a model first."
         )
 
+    # ============================
+    # 🚀 RUN PREDICTION
+    # ============================
     try:
         result = predict_with_confidence(current_model_file, data)
 
+        print("📊 Prediction Result:", result)
+
+        # ============================
+        # ❌ HANDLE MODEL ERRORS
+        # ============================
         if "error" in result:
             raise HTTPException(
                 status_code=400,
                 detail={
                     "message": result["error"],
-                    "required_features": result.get("required_features")
+                    "required_features": result.get("required_features"),
+                    "hint": "Ensure all required features are provided and target column is NOT included"
                 }
             )
 
+        # ============================
+        # ✅ SUCCESS RESPONSE
+        # ============================
         return {
             "status": "success",
-            "prediction": result["prediction"],
-            "confidence": result["confidence"],
-            "range": result["range"],
-            "features_used": result.get("features_used", []),
+            "prediction": result.get("prediction"),
+            "confidence": result.get("confidence"),
+            "range": result.get("range"),
+            "features_used": result.get("features_used", []),  # 🔥 important for frontend
             "model_type": result.get("model_type")
         }
 
+    # ============================
+    # ❗ PASS THROUGH VALIDATION ERRORS
+    # ============================
+    except HTTPException as http_err:
+        raise http_err
+
+    # ============================
+    # 💥 UNEXPECTED ERROR (DEBUG FRIENDLY)
+    # ============================
     except Exception as e:
         print("❌ PREDICT ENDPOINT ERROR:", str(e))
         print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail="Internal prediction error")
+
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "message": "Internal prediction error",
+                "error": str(e),                 # 🔥 real error exposed
+                "trace": traceback.format_exc() # 🔥 full debug trace
+            }
+        )
 
 
 # ==============================

@@ -6,14 +6,27 @@ const modelSchema = new mongoose.Schema({
     ref: "Dataset",
     required: true,
   },
+
   modelType: {
     type: String,
     default: "RandomForest",
   },
+
+  target: {
+    type: String,
+    required: true,
+  },
+
+  features: {
+    type: [String],
+    required: true,
+  },
+
   metrics: {
     type: Object,
     default: {},
   },
+
   trainedAt: {
     type: Date,
     default: Date.now,

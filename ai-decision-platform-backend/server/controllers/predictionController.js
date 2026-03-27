@@ -14,8 +14,14 @@ exports.runPrediction = async (req, res) => {
       return res.status(400).json({ message: "datasetId is required" });
     }
 
-    if (!inputValues || typeof inputValues !== "object" || Array.isArray(inputValues)) {
-      return res.status(400).json({ message: "inputValues must be a valid object" });
+    if (
+      !inputValues ||
+      typeof inputValues !== "object" ||
+      Array.isArray(inputValues)
+    ) {
+      return res
+        .status(400)
+        .json({ message: "inputValues must be a valid object" });
     }
 
     // ============================
@@ -28,30 +34,32 @@ exports.runPrediction = async (req, res) => {
 
     const trainedModel = await Model.findOne({ datasetId });
     if (!trainedModel) {
-      return res.status(400).json({ message: "Model not trained for this dataset" });
+      return res
+        .status(400)
+        .json({ message: "Model not trained for this dataset" });
     }
 
     // ============================
     // 🔥 TARGET DETECTION
     // ============================
-    let target = "";
+    const target = trainedModel.target;
 
-    if (dataset.targetColumn) {
-      target = dataset.targetColumn;
-    } else if (trainedModel.target) {
-      target = trainedModel.target;
-    } else if (dataset.columns?.length > 0) {
-      target = dataset.columns[dataset.columns.length - 1];
+    if (!target) {
+      return res.status(400).json({
+        message: "Model target not found. Please retrain model.",
+      });
     }
 
-    target = String(target).trim();
+    const featureColumns = (trainedModel.features || [])
+      .map((f) => (typeof f === "string" ? f.trim() : f))
+      .filter((f) => f && f.toLowerCase() !== target.toLowerCase())
+      .filter((f) => f.toLowerCase() !== "id");
 
-    const allColumns = dataset.columns || [];
-
-    const featureColumns = allColumns.filter((col) => {
-      if (typeof col !== "string") return true;
-      return col.trim().toLowerCase() !== target.toLowerCase();
-    });
+    if (!featureColumns.length) {
+      return res.status(400).json({
+        message: "No valid features found in model. Please retrain model.",
+      });
+    }
 
     console.log(`🎯 Target: ${target}`);
     console.log(`✅ Features:`, featureColumns);
@@ -92,7 +100,7 @@ exports.runPrediction = async (req, res) => {
     // ✅ CHECK MISSING FIELDS
     // ============================
     const missingFields = featureColumns.filter(
-      (col) => cleanedInput[col] === undefined
+      (col) => cleanedInput[col] === undefined,
     );
 
     if (missingFields.length > 0) {
@@ -186,8 +194,8 @@ exports.runPrediction = async (req, res) => {
     // ============================
     return res.status(200).json({
       message: "Prediction generated successfully",
-      features: featureColumns,   // 🔥 ADD THIS (frontend fix)
-      target: target,             // 🔥 ADD THIS
+      features: featureColumns, // 🔥 ADD THIS (frontend fix)
+      target: target, // 🔥 ADD THIS
       prediction: {
         _id: predictionRecord._id,
         datasetId,
@@ -199,7 +207,6 @@ exports.runPrediction = async (req, res) => {
         modelType: mlData.model_type,
       },
     });
-
   } catch (error) {
     console.error("❌ Prediction Controller Error:", error);
 
@@ -214,34 +221,50 @@ exports.getPredictionFeatures = async (req, res) => {
   try {
     const { datasetId } = req.params;
 
-    const dataset = await Dataset.findById(datasetId);
+    // 🔥 ONLY USE MODEL (SOURCE OF TRUTH)
     const model = await Model.findOne({ datasetId });
 
-    if (!dataset || !model) {
+    if (!model) {
       return res.status(404).json({
-        message: "Dataset or model not found"
+        message: "Model not trained yet. Please train a model first.",
       });
     }
 
-    let target =
-      dataset.targetColumn ||
-      model.target ||
-      dataset.columns[dataset.columns.length - 1];
+    // ============================
+    // ✅ VALIDATION
+    // ============================
+    if (!model.features || !Array.isArray(model.features)) {
+      return res.status(400).json({
+        message: "Model features not found or invalid",
+      });
+    }
 
-    const features = (dataset.columns || []).filter(
-      (col) =>
-        typeof col !== "string" ||
-        col.trim().toLowerCase() !== String(target).trim().toLowerCase()
-    );
+    if (!model.target) {
+      return res.status(400).json({
+        message: "Model target not found",
+      });
+    }
 
-    return res.json({
+    // ============================
+    // 🔥 CLEAN FEATURES
+    // ============================
+    const features = model.features
+      .map((f) => (typeof f === "string" ? f.trim() : f))
+      .filter((f) => f && f.toLowerCase() !== model.target.toLowerCase())
+      .filter((f) => f.toLowerCase() !== "id"); // 🔥 remove ID automatically
+
+    return res.status(200).json({
       features,
-      target
+      target: model.target,
+      totalFeatures: features.length,
     });
-
   } catch (err) {
     console.error("❌ Feature fetch error:", err);
-    res.status(500).json({ message: "Failed to fetch features" });
+
+    return res.status(500).json({
+      message: "Failed to fetch features",
+      error: err.message,
+    });
   }
 };
 
@@ -259,8 +282,8 @@ exports.getPredictionHistory = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ History Error:", error);
-    return res.status(500).json({ 
-      message: "Failed to fetch prediction history" 
+    return res.status(500).json({
+      message: "Failed to fetch prediction history",
     });
   }
 };

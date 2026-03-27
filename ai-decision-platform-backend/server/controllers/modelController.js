@@ -53,24 +53,72 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // 🔥 FIX 1: SAFE PATH RESOLUTION
-    const fullPath = path.join(__dirname, "../uploads", dataset.filePath);
+    const allColumns = dataset.columns || [];
 
-    console.log("📁 FINAL PATH:", fullPath);
+    // ============================
+    // 🔥 AUTO TARGET DETECTION (SAFE FALLBACK)
+    // ============================
+    if (!target) {
+      if (dataset.targetColumn) {
+        target = dataset.targetColumn;
+      } else if (allColumns.length > 0) {
+        target = allColumns[allColumns.length - 1];
+      }
+    }
+
+    if (!target) {
+      return res.status(400).json({
+        message: "Target column is required",
+      });
+    }
+
+    target = String(target).trim();
+
+    // ============================
+    // 🔥 AUTO FEATURE SELECTION
+    // ============================
+    if (!features || features.length === 0) {
+      features = allColumns.filter((col) => {
+        if (!col || typeof col !== "string") return false;
+
+        const clean = col.trim().toLowerCase();
+
+        if (clean === target.toLowerCase()) return false;
+        if (clean === "id") return false;
+
+        return true;
+      });
+    }
+
+    // ============================
+    // 🔥 CLEAN FEATURES
+    // ============================
+    features = features
+      .map((f) => (typeof f === "string" ? f.trim() : f))
+      .filter((f) => f && f.toLowerCase() !== target.toLowerCase())
+      .filter((f) => f.toLowerCase() !== "id");
+
+    if (!features.length) {
+      return res.status(400).json({
+        message: "No valid features selected",
+      });
+    }
+
+    console.log("🎯 Final Target:", target);
+    console.log("✅ Final Features:", features);
+
+    // ============================
+    // 🔥 FILE PATH FIX
+    // ============================
+    const fullPath = path.join(__dirname, "../uploads", dataset.filePath);
 
     if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
         message: "Dataset file not found",
-        debug: {
-          storedPath: dataset.filePath,
-          resolvedPath: fullPath,
-        },
       });
     }
 
     const stats = fs.statSync(fullPath);
-
-    console.log("📦 FILE SIZE:", stats.size);
 
     if (stats.size === 0) {
       return res.status(400).json({
@@ -93,32 +141,19 @@ exports.trainModel = async (req, res) => {
     }
 
     // ============================
-    // 🔥 SEND FILE TO ML SERVICE
+    // 🚀 SEND TO ML SERVICE
     // ============================
     const formData = new FormData();
 
-    // ✅ CLEAN FILE STREAM
-    formData.append(
-      "file",
-      fs.createReadStream(fullPath),
-      path.basename(fullPath),
-    );
-
+    formData.append("file", fs.createReadStream(fullPath));
     formData.append("model_type", model_type);
-
-    if (features) {
-      formData.append("features", JSON.stringify(features));
-    }
-
-    if (target) {
-      formData.append("target", target);
-    }
+    formData.append("features", JSON.stringify(features));
+    formData.append("target", target);
 
     const ML_URL = `${process.env.ML_API_URL}/train`;
 
     console.log("🚀 Sending to ML:", ML_URL);
 
-    // ✅ SAFE content-length
     const contentLength = await new Promise((resolve, reject) => {
       formData.getLength((err, length) => {
         if (err) reject(err);
@@ -138,9 +173,6 @@ exports.trainModel = async (req, res) => {
 
     console.log("✅ ML RESPONSE:", response.data);
 
-    // ============================
-    // ❌ HANDLE ML ERROR
-    // ============================
     if (!response.data || response.data.error) {
       return res.status(400).json({
         message: "ML error",
@@ -148,18 +180,19 @@ exports.trainModel = async (req, res) => {
       });
     }
 
-    // ============================
-    // 📊 METRICS
-    // ============================
     const metrics = response.data?.metrics || {};
 
     // ============================
-    // 💾 SAVE MODEL
+    // 💾 SAVE MODEL (🔥 MOST IMPORTANT FIX)
     // ============================
     const model = new Model({
       datasetId,
       modelType: model_type,
       metrics,
+
+      // 🔥 ADD THESE (CRITICAL)
+      target,
+      features,
     });
 
     await model.save();
@@ -169,6 +202,7 @@ exports.trainModel = async (req, res) => {
       model,
       mlResponse: response.data,
     });
+
   } catch (error) {
     console.error("❌ FULL ERROR:", {
       message: error.message,

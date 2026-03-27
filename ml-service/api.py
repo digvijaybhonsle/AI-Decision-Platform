@@ -247,22 +247,28 @@ async def get_insights(file: UploadFile = File(...)):
 # ==============================
 # MAIN ROUTE FOR NODE.JS (Critical)
 # ==============================
+# ==============================
+# MAIN ROUTE FOR NODE.JS
+# ==============================
 @app.post("/api/insights/{dataset_id}")
 async def generate_insights_for_dataset(
     dataset_id: str,
-    file: UploadFile = File(...)
+    file: UploadFile = File(...)      # This is correct
 ):
-    """This exact route is used by your Node.js controller"""
+    """This route handles POST /api/insights/{dataset_id} with file upload"""
     try:
         print(f"📊 Generating insights for dataset: {dataset_id}")
 
+        # Reset file pointer (very important)
         await file.seek(0)
+
         df = pd.read_csv(file.file)
 
         if df.empty:
             raise HTTPException(status_code=400, detail="Uploaded CSV file is empty")
 
         df.columns = df.columns.str.strip()
+
         insights_result = generate_insights_from_df(df)
 
         return {
@@ -273,6 +279,8 @@ async def generate_insights_for_dataset(
             "insights": insights_result
         }
 
+    except pd.errors.EmptyDataError:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty or invalid CSV")
     except Exception as e:
         print(f"❌ INSIGHTS ERROR for dataset {dataset_id}:", str(e))
         print(traceback.format_exc())

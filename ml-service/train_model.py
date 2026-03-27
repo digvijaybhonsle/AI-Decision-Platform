@@ -1,6 +1,9 @@
 import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_squared_error, accuracy_score
+from sklearn.metrics import (
+    r2_score, mean_squared_error,
+    accuracy_score, precision_score, recall_score
+)
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 from sklearn.linear_model import LinearRegression, LogisticRegression
 import joblib
@@ -22,26 +25,21 @@ def train_model(df, model_type, features=None, target=None):
         df = preprocess_data(df)
         df.columns = df.columns.str.strip()
 
-        print("📊 Columns after preprocessing:", df.columns.tolist())
-
-        # ❌ Empty checks
         if df.empty:
             return {"error": "Dataset is empty after preprocessing"}
 
         if df.shape[1] < 2:
-            return {"error": "Not enough columns after preprocessing"}
+            return {"error": "Not enough columns"}
 
         # ============================
         # 🎯 TARGET
         # ============================
         if target is None:
-            target = "Total_Spending" if "Total_Spending" in df.columns else df.columns[-1]
-
-        print("🎯 Target:", target)
+            target = df.columns[-1]
 
         if target not in df.columns:
             return {
-                "error": f"Target column '{target}' not found",
+                "error": f"Target '{target}' not found",
                 "available_columns": df.columns.tolist()
             }
 
@@ -51,24 +49,12 @@ def train_model(df, model_type, features=None, target=None):
         if features is None:
             features = [col for col in df.columns if col != target]
 
-        print("🧩 Features (before filter):", features)
-
-        # Validate features
         missing = [col for col in features if col not in df.columns]
         if missing:
-            return {
-                "error": f"Missing feature columns: {missing}",
-                "available_columns": df.columns.tolist()
-            }
-
-        # 🔥 Prevent leakage
-        if target == "Total_Spending":
-            features = [col for col in features if not col.lower().startswith("mnt")]
-
-        print("🧩 Features (after filter):", features)
+            return {"error": f"Missing features: {missing}"}
 
         if not features:
-            return {"error": "No valid features left after filtering"}
+            return {"error": "No valid features"}
 
         # ============================
         # 📊 DATA PREP
@@ -76,11 +62,36 @@ def train_model(df, model_type, features=None, target=None):
         X = df[features]
         y = df[target]
 
-        if X.empty or y.empty:
-            return {"error": "Feature or target data is empty"}
+        if len(X) < 10:
+            return {"error": "Not enough data"}
 
-        if len(X) < 5:
-            return {"error": "Not enough data rows for training"}
+        # ============================
+        # 🔍 AUTO TASK DETECTION
+        # ============================
+        is_classifier = y.nunique() < 10
+
+        # ============================
+        # 🤖 MODEL SELECTION
+        # ============================
+        if model_type == "random_forest":
+            model = (
+                RandomForestClassifier(n_estimators=200, random_state=42)
+                if is_classifier
+                else RandomForestRegressor(n_estimators=200, max_depth=15, random_state=42)
+            )
+
+        elif model_type == "linear":
+            if is_classifier:
+                return {"error": "Linear not valid for classification"}
+            model = LinearRegression()
+
+        elif model_type == "logistic":
+            if not is_classifier:
+                return {"error": "Logistic only for classification"}
+            model = LogisticRegression(max_iter=1000)
+
+        else:
+            return {"error": "Invalid model type"}
 
         # ============================
         # 🔀 SPLIT
@@ -89,97 +100,66 @@ def train_model(df, model_type, features=None, target=None):
             X, y, test_size=0.2, random_state=42
         )
 
-        if X_train.empty or y_train.empty:
-            return {"error": "Training split is empty"}
-
-        # ============================
-        # 🤖 MODEL SELECTION
-        # ============================
-        if model_type == "random_forest":
-            if y.nunique() < 10:
-                model = RandomForestClassifier(n_estimators=200, random_state=42)
-                is_classifier = True
-            else:
-                model = RandomForestRegressor(n_estimators=200, max_depth=15, random_state=42)
-                is_classifier = False
-
-        elif model_type == "linear":
-            model = LinearRegression()
-            is_classifier = False
-
-        elif model_type == "logistic":
-            model = LogisticRegression(max_iter=1000)
-            is_classifier = True
-
-        else:
-            return {"error": "Invalid model type"}
-
-        print("🤖 Model selected:", type(model).__name__)
-
         # ============================
         # 🚀 TRAIN
         # ============================
-        print("🚀 Training started...")
         model.fit(X_train, y_train)
-        print("✅ Training completed")
-
-        # 🚨 CRITICAL FIX
-        if model is None:
-            return {"error": "Model training failed. Model is None"}
 
         # ============================
         # 📈 PREDICT
         # ============================
         y_pred = model.predict(X_test)
 
-        if len(y_pred) == 0:
-            return {"error": "Prediction failed"}
-
         # ============================
-        # 📊 METRICS
+        # 📊 METRICS (PRO LEVEL)
         # ============================
         if is_classifier:
-            metric = {"accuracy": accuracy_score(y_test, y_pred)}
-        else:
-            metric = {
-                "r2_score": r2_score(y_test, y_pred),
-                "mse": mean_squared_error(y_test, y_pred)
+            metrics = {
+                "accuracy": round(accuracy_score(y_test, y_pred), 4),
+                "precision": round(precision_score(y_test, y_pred, average="weighted", zero_division=0), 4),
+                "recall": round(recall_score(y_test, y_pred, average="weighted", zero_division=0), 4),
             }
+            task = "classification"
 
-        print("📊 Metrics:", metric)
+        else:
+            mse = mean_squared_error(y_test, y_pred)
+            rmse = mse ** 0.5
+
+            metrics = {
+                "r2_score": round(r2_score(y_test, y_pred), 4),
+                "mse": round(mse, 4),
+                "rmse": round(rmse, 4),
+            }
+            task = "regression"
 
         # ============================
-        # 💾 SAVE MODEL (FIXED STRUCTURE)
+        # 💾 SAVE MODEL
         # ============================
         model_filename = f"{model_type}_{target}_{int(time.time())}.pkl"
         model_path = os.path.join(MODEL_PATH, model_filename)
 
         joblib.dump({
-            "model": model,               # ✅ IMPORTANT FIX
+            "model": model,
             "features": features,
             "target": target,
+            "task": task,
             "created_at": int(time.time())
         }, model_path)
 
-        print("💾 Model saved at:", model_path)
-
         # ============================
-        # ✅ RETURN
+        # ✅ RESPONSE (CLEAN API)
         # ============================
         return {
+            "task": task,
             "model_type": model_type,
             "target": target,
             "features": features,
             "model_path": model_path,
-            "model_obj": model,   # ✅ now guaranteed valid
-            "metrics": metric
+            "metrics": metrics
         }
 
     except Exception as e:
         import traceback
-        print("❌ ERROR:", str(e))
-        print(traceback.format_exc())
-
         return {
             "error": str(e),
             "trace": traceback.format_exc()

@@ -4,19 +4,20 @@ const modelSchema = new mongoose.Schema({
   datasetId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Dataset",
-    required: true
+    required: true,
   },
   modelType: {
     type: String,
-    default: "RandomForest"
+    default: "RandomForest",
   },
-  accuracy: {
-    type: Number
+  metrics: {
+    type: Object,
+    default: {},
   },
   trainedAt: {
     type: Date,
-    default: Date.now
-  }
+    default: Date.now,
+  },
 });
 
 module.exports = mongoose.model("Model", modelSchema);

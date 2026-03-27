@@ -151,10 +151,7 @@ exports.trainModel = async (req, res) => {
     // ============================
     // 📊 METRICS
     // ============================
-    const accuracy =
-      response.data?.metrics?.accuracy ??
-      response.data?.metrics?.r2_score ??
-      null;
+    const metrics = response.data?.metrics || {};
 
     // ============================
     // 💾 SAVE MODEL
@@ -162,7 +159,7 @@ exports.trainModel = async (req, res) => {
     const model = new Model({
       datasetId,
       modelType: model_type,
-      accuracy,
+      metrics,
     });
 
     await model.save();

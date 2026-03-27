@@ -6,21 +6,21 @@ const fs = require("fs");
 const FormData = require("form-data");
 const path = require("path");
 
-// 📁 Upload folder
-const UPLOAD_DIR = path.join(__dirname, "../uploads");
-
-// 🚀 GENERATE INSIGHTS
+// 🚀 GENERATE INSIGHTS - FINAL UPDATED VERSION
 exports.generateInsights = async (req, res) => {
   try {
     const { datasetId } = req.params;
 
     console.log("📥 Insights Request for dataset:", datasetId);
 
+    if (!datasetId) {
+      return res.status(400).json({ message: "datasetId is required" });
+    }
+
     // ============================
     // ✅ CHECK DATASET
     // ============================
     const dataset = await Dataset.findById(datasetId);
-
     if (!dataset) {
       return res.status(404).json({
         message: "Dataset not found",
@@ -31,7 +31,6 @@ exports.generateInsights = async (req, res) => {
     // ✅ CHECK MODEL
     // ============================
     const model = await Model.findOne({ datasetId });
-
     if (!model) {
       return res.status(400).json({
         message: "Model not trained for this dataset",
@@ -39,7 +38,7 @@ exports.generateInsights = async (req, res) => {
     }
 
     // ============================
-    // 📁 BUILD FILE PATH (FIXED)
+    // 📁 BUILD FILE PATH
     // ============================
     const fullPath = path.join(
       __dirname,
@@ -57,11 +56,8 @@ exports.generateInsights = async (req, res) => {
     }
 
     const stats = fs.statSync(fullPath);
-
     if (stats.size === 0) {
-      return res.status(400).json({
-        message: "Dataset file is empty"
-      });
+      return res.status(400).json({ message: "Dataset file is empty" });
     }
 
     console.log("📦 FILE SIZE:", stats.size);
@@ -71,29 +67,20 @@ exports.generateInsights = async (req, res) => {
     // ============================
     const formData = new FormData();
 
-    // ✅ CLEAN stream (no contentType)
     formData.append(
       "file",
       fs.createReadStream(fullPath),
       path.basename(fullPath)
     );
 
-    const ML_URL = `${process.env.ML_API_URL}/insights`;
-
+    // 🔥 UPDATED URL - Now correctly matches FastAPI route
+    const ML_URL = `${process.env.ML_API_URL}/api/insights/${datasetId}`;
     console.log("🚀 Sending to ML:", ML_URL);
 
-    // ✅ SAFE content-length
-    const contentLength = await new Promise((resolve, reject) => {
-      formData.getLength((err, length) => {
-        if (err) reject(err);
-        else resolve(length);
-      });
-    });
-
+    // Remove manual content-length (axios handles it better with FormData)
     const response = await axios.post(ML_URL, formData, {
       headers: {
         ...formData.getHeaders(),
-        "Content-Length": contentLength,
       },
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
@@ -102,6 +89,7 @@ exports.generateInsights = async (req, res) => {
 
     const mlData = response.data;
 
+    console.log("✅ ML RESPONSE STATUS:", response.status);
     console.log("✅ ML RESPONSE:", mlData);
 
     // ============================
@@ -109,21 +97,21 @@ exports.generateInsights = async (req, res) => {
     // ============================
     if (!mlData || mlData.error) {
       return res.status(400).json({
-        message: "ML error",
+        message: "ML service returned an error",
         error: mlData,
       });
     }
 
     // ============================
-    // 💾 SAVE INSIGHTS (SAFE)
+    // 💾 SAVE INSIGHTS
     // ============================
     const insight = new Insight({
       datasetId: dataset._id,
-      summary: mlData.summary || {},
+      summary: mlData.summary || mlData.insights || {},
       trend: mlData.trend || [],
       distribution: mlData.distribution || {},
       recommendations: mlData.recommendations || [],
-      raw: mlData // 🔥 keep full response (best practice)
+      raw: mlData
     });
 
     await insight.save();
@@ -142,7 +130,7 @@ exports.generateInsights = async (req, res) => {
     });
 
     return res.status(500).json({
-      message: "ML service error",
+      message: "Failed to generate insights",
       error: error.response?.data || error.message,
     });
   }

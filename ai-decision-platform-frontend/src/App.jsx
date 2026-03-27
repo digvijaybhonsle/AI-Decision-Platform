@@ -1,5 +1,8 @@
 import React from "react";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import ProtectedRoute from "./components/Route/ProtectedRoute";
+import GlobalMLLoader from "./components/common/GlobalMLLoader";
+
 
 import Landingpage from "./pages/Landingpage";
 import Dashboard from "./components/layout/Dashboard";
@@ -15,6 +18,7 @@ import Insights from "./pages/Insights";
 function App() {
   return (
     <Router>
+      <GlobalMLLoader />
       <Routes>
         <Route path="/" element={<Landingpage />} />
 
@@ -22,7 +26,13 @@ function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        <Route element={<DashboardLayout />}>
+        <Route
+          element={
+            <ProtectedRoute>
+              <DashboardLayout />
+            </ProtectedRoute>
+          }
+        >
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/upload-dataset" element={<DatasetUpload />} />
           <Route path="/train-model" element={<TrainModel />} />

@@ -1,147 +1,245 @@
-import React, { useState } from "react";
-import { UploadCloud } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { UploadCloud, Trash2 } from "lucide-react";
+import api from "../utils/api";
 
 const DatasetUpload = () => {
   const [file, setFile] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
+  const [columns, setColumns] = useState([]);
+  const [preview, setPreview] = useState([]);
+  const [datasets, setDatasets] = useState([]);
+
+  // 🔥 FETCH DATASETS
+  const fetchDatasets = async () => {
+    try {
+      const res = await api.get("/api/dataset");
+      setDatasets(res.data.data);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  useEffect(() => {
+    fetchDatasets();
+  }, []);
+
+  // ✅ File validation
   const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
+    const selected = e.target.files[0];
+
+    if (!selected) return;
+
+    if (!selected.name.endsWith(".csv")) {
+      setError("Only CSV files allowed");
+      return;
+    }
+
+    if (selected.size > 5 * 1024 * 1024) {
+      setError("File size must be < 5MB");
+      return;
+    }
+
+    setError("");
+    setFile(selected);
+  };
+
+  // ✅ Upload dataset
+  const handleUpload = async () => {
+    if (!file) {
+      setError("Please select a file");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError("");
+
+      const formData = new FormData();
+      formData.append("file", file);
+
+      // 🔥 Upload API
+      const res = await api.post("/api/dataset/upload", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      const { datasetId, columns } = res.data;
+
+      setColumns(columns);
+
+      // 🔥 Fetch preview
+      const previewRes = await api.get(`/api/dataset/${datasetId}/preview`);
+
+      setPreview(previewRes.data.previewRows);
+    } catch (err) {
+      console.error(err);
+      setError(err.response?.data?.message || "Upload failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+   // ❌ DELETE DATASET
+  const handleDelete = async (id) => {
+    try {
+      await api.delete(`/api/dataset/${id}`);
+      fetchDatasets();
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   return (
     <div className="space-y-8">
-
-      {/* Page Header */}
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Upload Dataset</h1>
-        <p className="text-gray-500">
-          Upload your CSV dataset to train machine learning models.
-        </p>
+        <h1 className="text-2xl font-bold">Upload Dataset</h1>
+        <p className="text-gray-500">Upload CSV to train models</p>
       </div>
 
-      {/* Upload Section */}
+      {/* Upload */}
       <div className="bg-white p-8 rounded-xl shadow-sm">
+        <div className="border-2 border-dashed border-gray-300 rounded-xl p-12 text-center hover:border-blue-500 transition flex flex-col items-center justify-center">
+          {/* Icon */}
+          <div className="w-16 h-16 flex items-center justify-center rounded-full bg-blue-100 mb-4">
+            <UploadCloud size={28} className="text-blue-600" />
+          </div>
 
-        <div className="border-2 border-dashed border-gray-300 rounded-lg p-10 flex flex-col items-center justify-center text-center">
+          {/* Title */}
+          <h3 className="text-lg font-semibold text-gray-800 mb-1">
+            Upload your dataset
+          </h3>
 
-          <UploadCloud size={40} className="text-blue-500 mb-4" />
-
-          <p className="text-gray-600 mb-2">
-            Drag and drop your dataset here
+          {/* Subtitle */}
+          <p className="text-sm text-gray-500 mb-4">
+            Drag & drop your CSV file here or browse from your device
           </p>
 
-          <p className="text-sm text-gray-400 mb-4">
-            Supported format: CSV
-          </p>
-
+          {/* Input */}
           <input
             type="file"
             accept=".csv"
             onChange={handleFileChange}
             className="hidden"
-            id="datasetUpload"
+            id="upload"
           />
 
+          {/* CTA */}
           <label
-            htmlFor="datasetUpload"
-            className="cursor-pointer bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition"
+            htmlFor="upload"
+            className="cursor-pointer bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition shadow-sm"
           >
-            Choose File
+            Browse File
           </label>
 
+          {/* File Info */}
           {file && (
-            <p className="mt-4 text-sm text-gray-600">
-              Selected File: <span className="font-medium">{file.name}</span>
-            </p>
+            <div className="mt-5 px-4 py-2 bg-gray-100 rounded-lg text-sm text-gray-700">
+              📄 {file.name}
+            </div>
           )}
 
+          {/* Error */}
+          {error && <p className="text-red-500 mt-3 text-sm">{error}</p>}
+
+          {/* Upload Button */}
+          {file && (
+            <button
+              onClick={handleUpload}
+              disabled={loading}
+              className={`mt-5 px-6 py-2 rounded-lg text-white font-medium transition ${
+                loading
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-700 shadow"
+              }`}
+            >
+              {loading ? "Uploading..." : "Upload Dataset"}
+            </button>
+          )}
+
+          {/* Helper Text */}
+          {!file && (
+            <p className="text-xs text-gray-400 mt-4">
+              Supported format: CSV • Max size: 5MB
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Dataset Preview */}
+      {/* Preview */}
+      {preview.length > 0 && (
+        <div className="bg-white p-6 rounded-xl shadow-sm">
+          <h2 className="text-lg font-semibold mb-4">Dataset Preview</h2>
+
+          {/* 🔥 Scroll Container Added */}
+          <div className="border rounded-lg overflow-hidden">
+            <div className="max-h-100 w-full overflow-auto">
+              <table className="min-w-150 w-full text-sm">
+                {/* Sticky Header */}
+                <thead className="bg-gray-50 sticky top-0 z-10">
+                  <tr>
+                    {columns.map((col) => (
+                      <th
+                        key={col}
+                        className="py-2 px-4 text-left whitespace-nowrap font-medium text-gray-600"
+                      >
+                        {col}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+
+                <tbody className="divide-y text-gray-700">
+                  {preview.map((row, i) => (
+                    <tr key={i} className="hover:bg-gray-50 transition">
+                      {columns.map((col) => (
+                        <td key={col} className="px-4 py-2 whitespace-nowrap">
+                          {row[col]}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 DATASET LIST */}
       <div className="bg-white p-6 rounded-xl shadow-sm">
+        <h2 className="text-lg font-semibold mb-4">Your Datasets</h2>
 
-        <h2 className="text-lg font-semibold mb-4">Dataset Preview</h2>
+        {datasets.length === 0 ? (
+          <p className="text-gray-400 text-sm">No datasets uploaded yet</p>
+        ) : (
+          <div className="space-y-3">
+            {datasets.map((d) => (
+              <div
+                key={d._id}
+                className="flex items-center justify-between border p-4 rounded-lg hover:bg-gray-50"
+              >
+                <div>
+                  <p className="font-medium">{d.datasetName}</p>
+                  <p className="text-xs text-gray-500">
+                    {d.columns?.length} columns • {d.rows} rows
+                  </p>
+                </div>
 
-        <div className="overflow-x-auto">
-
-          <table className="w-full text-sm text-left">
-
-            <thead className="border-b text-gray-500">
-              <tr>
-                <th className="py-2">Column 1</th>
-                <th className="py-2">Column 2</th>
-                <th className="py-2">Column 3</th>
-                <th className="py-2">Column 4</th>
-              </tr>
-            </thead>
-
-            <tbody className="text-gray-700">
-              <tr className="border-b">
-                <td className="py-2">12</td>
-                <td>45</td>
-                <td>78</td>
-                <td>100</td>
-              </tr>
-
-              <tr className="border-b">
-                <td className="py-2">15</td>
-                <td>52</td>
-                <td>81</td>
-                <td>120</td>
-              </tr>
-
-              <tr>
-                <td className="py-2">18</td>
-                <td>60</td>
-                <td>90</td>
-                <td>150</td>
-              </tr>
-            </tbody>
-
-          </table>
-
-        </div>
+                <button
+                  onClick={() => handleDelete(d._id)}
+                  className="text-red-500 hover:text-red-700 cursor-pointer"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-
-      {/* Feature + Target Selection */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-        {/* Feature Column */}
-        <div className="bg-white p-6 rounded-xl shadow-sm">
-
-          <h2 className="text-lg font-semibold mb-4">Feature Column</h2>
-
-          <select className="w-full border border-gray-300 rounded-lg p-2">
-            <option>Select feature column</option>
-            <option>Column 1</option>
-            <option>Column 2</option>
-            <option>Column 3</option>
-          </select>
-
-        </div>
-
-        {/* Target Column */}
-        <div className="bg-white p-6 rounded-xl shadow-sm">
-
-          <h2 className="text-lg font-semibold mb-4">Target Column</h2>
-
-          <select className="w-full border border-gray-300 rounded-lg p-2">
-            <option>Select target column</option>
-            <option>Column 4</option>
-          </select>
-
-        </div>
-
-      </div>
-
-      {/* Submit Button */}
-      <div>
-        <button className="bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition">
-          Process Dataset
-        </button>
-      </div>
-
     </div>
   );
 };

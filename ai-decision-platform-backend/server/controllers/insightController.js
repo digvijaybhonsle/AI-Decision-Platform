@@ -6,7 +6,7 @@ const fs = require("fs");
 const FormData = require("form-data");
 const path = require("path");
 
-// 🚀 GENERATE INSIGHTS - FINAL UPDATED VERSION
+// 🚀 GENERATE INSIGHTS
 exports.generateInsights = async (req, res) => {
   try {
     const { datasetId } = req.params;
@@ -38,32 +38,26 @@ exports.generateInsights = async (req, res) => {
     }
 
     // ============================
-    // 📁 BUILD FILE PATH
+    // 📁 FILE PATH
     // ============================
-    const fullPath = path.join(
-      __dirname,
-      "../uploads",
-      dataset.filePath
-    );
-
-    console.log("📁 FILE PATH:", fullPath);
+    const fullPath = path.join(__dirname, "../uploads", dataset.filePath);
 
     if (!fs.existsSync(fullPath)) {
       return res.status(400).json({
-        message: "Dataset file not found on server",
-        path: fullPath
+        message: "Dataset file not found",
+        path: fullPath,
       });
     }
 
     const stats = fs.statSync(fullPath);
     if (stats.size === 0) {
-      return res.status(400).json({ message: "Dataset file is empty" });
+      return res.status(400).json({
+        message: "Dataset file is empty",
+      });
     }
 
-    console.log("📦 FILE SIZE:", stats.size);
-
     // ============================
-    // 🔥 SEND FILE TO ML SERVICE
+    // 🔥 SEND FILE TO ML
     // ============================
     const formData = new FormData();
 
@@ -73,15 +67,10 @@ exports.generateInsights = async (req, res) => {
       path.basename(fullPath)
     );
 
-    // 🔥 UPDATED URL - Now correctly matches FastAPI route
     const ML_URL = `${process.env.ML_API_URL}/api/insights/${datasetId}`;
-    console.log("🚀 Sending to ML:", ML_URL);
 
-    // Remove manual content-length (axios handles it better with FormData)
     const response = await axios.post(ML_URL, formData, {
-      headers: {
-        ...formData.getHeaders(),
-      },
+      headers: formData.getHeaders(),
       maxContentLength: Infinity,
       maxBodyLength: Infinity,
       timeout: 180000,
@@ -89,36 +78,45 @@ exports.generateInsights = async (req, res) => {
 
     const mlData = response.data;
 
-    console.log("✅ ML RESPONSE STATUS:", response.status);
     console.log("✅ ML RESPONSE:", mlData);
 
     // ============================
     // ❌ HANDLE ML ERROR
     // ============================
-    if (!mlData || mlData.error) {
+    if (!mlData || mlData.error || !mlData.insights) {
       return res.status(400).json({
-        message: "ML service returned an error",
+        message: "Invalid ML response",
         error: mlData,
       });
     }
 
     // ============================
-    // 💾 SAVE INSIGHTS
+    // 🔥 EXTRACT CORRECT STRUCTURE
     // ============================
-    const insight = new Insight({
-      datasetId: dataset._id,
-      summary: mlData.summary || mlData.insights || {},
-      trend: mlData.trend || [],
-      distribution: mlData.distribution || {},
-      recommendations: mlData.recommendations || [],
-      raw: mlData
-    });
+    const insights = mlData.insights;
 
-    await insight.save();
+    // ============================
+    // 💾 SAVE / UPDATE (UPSERT)
+    // ============================
+    const savedInsight = await Insight.findOneAndUpdate(
+      { datasetId: dataset._id },
+      {
+        datasetId: dataset._id,
+        summary: insights.summary || {},
+        trend: insights.trend || [],
+        distribution: insights.distribution || {},
+        recommendations: insights.recommendations || [],
+        raw: mlData,
+      },
+      { new: true, upsert: true }
+    );
 
+    // ============================
+    // ✅ RESPONSE
+    // ============================
     return res.status(200).json({
       message: "Insights generated successfully",
-      insight,
+      insight: savedInsight,
       mlResponse: mlData,
     });
 

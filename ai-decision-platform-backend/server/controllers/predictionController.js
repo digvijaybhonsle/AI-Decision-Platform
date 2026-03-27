@@ -52,36 +52,31 @@ exports.runPrediction = async (req, res) => {
     }
 
     // ============================
-    // 🔥 SCHEMA VALIDATION (IMPORTANT)
+    // 🔥 SCHEMA VALIDATION
     // ============================
-
     const allColumns = dataset.columns || [];
     const target = dataset.targetColumn;
 
-    // remove target column
     const featureColumns = allColumns.filter((col) => col !== target);
 
-    // remove unwanted fields + convert types
     const cleanedInput = {};
 
     featureColumns.forEach((col) => {
       let value = inputValues[col];
 
-      if (value === undefined) return;
+      if (value === undefined || value === "") return;
 
       // convert to number if possible
-      if (value !== "" && !isNaN(value)) {
+      if (!isNaN(value)) {
         value = Number(value);
       }
 
       cleanedInput[col] = value;
     });
 
-    // ❌ check missing fields
+    // ❌ Missing fields
     const missingFields = featureColumns.filter(
-      (col) =>
-        cleanedInput[col] === undefined ||
-        cleanedInput[col] === ""
+      (col) => cleanedInput[col] === undefined
     );
 
     if (missingFields.length > 0) {
@@ -99,20 +94,20 @@ exports.runPrediction = async (req, res) => {
     console.log("🚀 Sending to ML:", cleanedInput);
 
     const response = await axios.post(ML_URL, cleanedInput, {
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       timeout: 180000,
-      validateStatus: () => true, // 🔥 prevent crash
+      validateStatus: () => true,
     });
 
-    // ============================
-    // ❌ HANDLE ML FAILURE
-    // ============================
-    if (response.status !== 200) {
-      console.error("❌ ML STATUS:", response.status);
-      console.error("❌ ML DATA:", response.data);
+    console.log("📡 ML STATUS:", response.status);
+    console.log("📡 ML DATA:", response.data);
 
+    // ============================
+    // 🔥 HANDLE ML RESPONSES (FIXED LOGIC)
+    // ============================
+
+    // ❌ ML INTERNAL ERROR
+    if (response.status >= 500) {
       return res.status(503).json({
         message: "ML service unavailable",
         retry: true,
@@ -120,10 +115,27 @@ exports.runPrediction = async (req, res) => {
       });
     }
 
+    // ❌ INVALID INPUT (MOST IMPORTANT FIX)
+    if (response.status === 400) {
+      return res.status(400).json({
+        message: "Invalid input for prediction",
+        error: response.data,
+      });
+    }
+
+    // ❌ OTHER NON-200
+    if (response.status !== 200) {
+      return res.status(response.status).json({
+        message: "Unexpected ML response",
+        error: response.data,
+      });
+    }
+
     const mlData = response.data;
 
-    console.log("✅ ML RESPONSE:", mlData);
-
+    // ============================
+    // ❌ ML LOGICAL ERROR
+    // ============================
     if (!mlData || mlData.error) {
       return res.status(400).json({
         message: "ML error",
@@ -132,7 +144,7 @@ exports.runPrediction = async (req, res) => {
     }
 
     // ============================
-    // ✅ EXTRACT PREDICTION (ROBUST)
+    // ✅ EXTRACT PREDICTION
     // ============================
     const predictedValue =
       mlData.prediction ??
@@ -153,7 +165,7 @@ exports.runPrediction = async (req, res) => {
     // ============================
     const prediction = new Prediction({
       datasetId,
-      inputValues: cleanedInput, // ✅ save cleaned version
+      inputValues: cleanedInput,
       predictedValue,
     });
 

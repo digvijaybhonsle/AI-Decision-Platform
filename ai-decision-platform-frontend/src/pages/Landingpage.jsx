@@ -1,8 +1,10 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import Navbar from "../components/common/Landingpart/Navbar";
 import Hero from "../components/common/Landingpart/Hero";
 import Footer from "../components/common/Landingpart/Footer";
 import Dashboard from "../assets/DashboardImage.jpeg";
+
 import {
   TrendingUp,
   GitBranch,
@@ -14,210 +16,144 @@ import {
 } from "lucide-react";
 
 const Landingpage = () => {
+  const navigate = useNavigate();
+
   return (
-    <div>
+    <div className="w-full overflow-x-hidden">
       <Navbar />
       <Hero />
 
-      <section className="py-20 bg-[#F8FAFC]">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Card 1 */}
-            <div className="p-6 rounded-xl shadow-md hover:shadow-xl transition bg-white">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <TrendingUp className="text-blue-600" size={22} />
+      {/* FEATURES */}
+      <section className="py-16 md:py-20 bg-[#F8FAFC]">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
+            
+            {/* Card */}
+            {[{
+              icon: <TrendingUp className="text-blue-600" size={22} />,
+              title: "Predictive Analysis",
+              desc: "Forecast future trends using AI models to make smarter decisions.",
+              bg: "bg-blue-100"
+            },{
+              icon: <GitBranch className="text-green-600" size={22} />,
+              title: "Scenario Simulation",
+              desc: "Test what-if strategies before making business decisions.",
+              bg: "bg-green-100"
+            },{
+              icon: <Lightbulb className="text-yellow-600" size={22} />,
+              title: "Insight Generation",
+              desc: "Discover hidden patterns to drive growth.",
+              bg: "bg-yellow-100"
+            }].map((item, i) => (
+              <div key={i} className="p-6 rounded-xl shadow-md hover:shadow-xl transition bg-white">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className={`p-2 rounded-lg ${item.bg}`}>
+                    {item.icon}
+                  </div>
+                  <h3 className="text-lg font-semibold">{item.title}</h3>
                 </div>
-                <div className="text-xl font-semibold">Predictive Analysis</div>
+                <hr className="mb-4" />
+                <p className="text-gray-600 text-sm">{item.desc}</p>
               </div>
-
-              <hr className="mb-4" />
-
-              <p className="text-gray-600">
-                Forecast advanced future trends using powerful AI models to help
-                businesses make smarter strategic decisions.
-              </p>
-            </div>
-
-            {/* Card 2 */}
-            <div className="p-6 rounded-xl shadow-md hover:shadow-xl transition bg-white">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-green-100 rounded-lg">
-                  <GitBranch className="text-green-600" size={22} />
-                </div>
-                <div className="text-xl font-semibold">Scenario Simulation</div>
-              </div>
-
-              <hr className="mb-4" />
-
-              <p className="text-gray-600">
-                Explore "what-if" scenarios and evaluate different strategies
-                before making important business decisions.
-              </p>
-            </div>
-
-            {/* Card 3 */}
-            <div className="p-6 rounded-xl shadow-md hover:shadow-xl transition bg-white">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <Lightbulb className="text-yellow-600" size={22} />
-                </div>
-                <div className="text-xl font-semibold">Insight Generation</div>
-              </div>
-
-              <hr className="mb-4" />
-
-              <p className="text-gray-600">
-                Discover hidden patterns and generate powerful insights from
-                data to drive better business outcomes.
-              </p>
-            </div>
+            ))}
           </div>
         </div>
       </section>
 
-      <section className="py-20 bg-[#F8FAFC]">
-        {/* Section Title */}
-        <div className="flex items-center justify-center gap-4 mb-12">
-          <hr className="w-110 border-gray-300" />
-          <h2 className="text-3xl font-bold text-[#0F172A]">How It Works</h2>
-          <hr className="w-110 border-gray-300" />
+      {/* HOW IT WORKS */}
+      <section className="py-16 md:py-20 bg-[#F8FAFC]">
+        <h2 className="text-2xl md:text-3xl font-bold text-center mb-12">
+          How It Works
+        </h2>
+
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 grid gap-6 sm:grid-cols-2 md:grid-cols-3">
+          
+          {[{
+            icon: <Upload className="text-blue-600" size={22} />,
+            title: "Upload Your Data",
+            desc: "Upload datasets to begin AI analysis.",
+            bg: "bg-blue-100"
+          },{
+            icon: <Brain className="text-purple-600" size={22} />,
+            title: "Train the Model",
+            desc: "AI learns patterns and builds predictive models.",
+            bg: "bg-purple-100"
+          },{
+            icon: <Sparkles className="text-yellow-600" size={22} />,
+            title: "Get Insights",
+            desc: "Receive predictions and actionable insights.",
+            bg: "bg-yellow-100"
+          }].map((item, i) => (
+            <div key={i} className="p-6 rounded-xl shadow-md hover:shadow-xl transition bg-white">
+              <div className="flex items-center gap-3 mb-3">
+                <div className={`p-2 rounded-lg ${item.bg}`}>
+                  {item.icon}
+                </div>
+                <h3 className="text-lg font-semibold">{item.title}</h3>
+              </div>
+              <hr className="mb-4" />
+              <p className="text-gray-600 text-sm">{item.desc}</p>
+            </div>
+          ))}
         </div>
+      </section>
 
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="grid md:grid-cols-3 gap-8">
-            {/* Step 1 */}
-            <div className="p-6 rounded-xl shadow-md hover:shadow-xl transition bg-white">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-blue-100 rounded-lg">
-                  <Upload className="text-blue-600" size={22} />
-                </div>
-                <div className="text-xl font-semibold">Upload Your Data</div>
+      {/* AI POWER SECTION */}
+      <section className="py-16 md:py-24 bg-[#eef1f4]">
+        <h2 className="text-2xl md:text-4xl font-bold text-center mb-12">
+          See the Power of AI
+        </h2>
+
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 grid md:grid-cols-2 gap-10 items-center">
+          
+          {/* IMAGE */}
+          <img
+            src={Dashboard}
+            alt="Dashboard"
+            className="w-full rounded-xl shadow-xl border"
+          />
+
+          {/* CONTENT */}
+          <div className="bg-white p-6 md:p-8 rounded-xl shadow-lg space-y-5">
+            {[
+              "Increase Revenue with accurate AI predictions.",
+              "Test Strategies using simulations.",
+              "Gain Insights for smarter growth."
+            ].map((text, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <CheckCircle className="text-blue-600 mt-1" size={20} />
+                <p className="text-sm md:text-base">{text}</p>
               </div>
+            ))}
 
-              <hr className="mb-4" />
-
-              <p className="text-gray-600">
-                Easily upload your business datasets to start analyzing trends
-                and building AI-driven predictions.
-              </p>
-            </div>
-
-            {/* Step 2 */}
-            <div className="p-6 rounded-xl shadow-md hover:shadow-xl transition bg-white">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-purple-100 rounded-lg">
-                  <Brain className="text-purple-600" size={22} />
-                </div>
-                <div className="text-xl font-semibold">Train the Model</div>
-              </div>
-
-              <hr className="mb-4" />
-
-              <p className="text-gray-600">
-                Our AI learns patterns from your data and trains intelligent
-                models to forecast future trends.
-              </p>
-            </div>
-
-            {/* Step 3 */}
-            <div className="p-6 rounded-xl shadow-md hover:shadow-xl transition bg-white">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="p-2 bg-yellow-100 rounded-lg">
-                  <Sparkles className="text-yellow-600" size={22} />
-                </div>
-                <div className="text-xl font-semibold">
-                  Generate Insights & Predictions
-                </div>
-              </div>
-
-              <hr className="mb-4" />
-
-              <p className="text-gray-600">
-                Receive powerful predictions and actionable insights to guide
-                smarter business decisions.
-              </p>
-            </div>
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="w-full sm:w-auto px-6 py-3 bg-blue-600 cursor-pointer text-white rounded-full hover:bg-blue-700 transition"
+            >
+              Explore Dashboard
+            </button>
           </div>
         </div>
       </section>
 
-      <section className="py-24 bg-[#eef1f4]">
-        {/* Section Title */}
-        <div className="flex items-center justify-center gap-6 mb-16">
-          <hr className="w-100 border-gray-300" />
-          <h2 className="text-3xl md:text-4xl font-bold text-[#0F172A] text-center">
-            See the Power of AI
-          </h2>
-          <hr className="w-100 border-gray-300" />
-        </div>
+      {/* CTA */}
+      <section className="py-16 md:py-24 bg-[#eef1f4] text-center px-4">
+        <h1 className="text-3xl md:text-5xl font-bold mb-6">
+          Ready to Transform Your Business?
+        </h1>
 
-        {/* Content */}
-        <div className="max-w-6xl mx-auto px-6 grid md:grid-cols-2 gap-12 items-center">
-          {/* Dashboard Image */}
-          <div className="flex justify-center">
-            <img
-              src={Dashboard}
-              alt="Dashboard"
-              className="rounded-xl shadow-xl border w-3xl"
-            />
-          </div>
+        <p className="text-gray-700 mb-6">
+          Start your journey with AI-powered insights today.
+        </p>
 
-          {/* Info Card */}
-          <div className="bg-white p-8 rounded-xl shadow-lg space-y-6">
-            <div className="flex items-start gap-3">
-              <CheckCircle className="text-blue-600 mt-1" size={20} />
-              <p>
-                <span className="font-semibold">Increase Revenue</span> with
-                accurate AI-powered predictions.
-              </p>
-            </div>
-
-            <hr />
-
-            <div className="flex items-start gap-3">
-              <CheckCircle className="text-blue-600 mt-1" size={20} />
-              <p>
-                <span className="font-semibold">Test Strategies</span> using
-                scenario simulations before making decisions.
-              </p>
-            </div>
-
-            <hr />
-
-            <div className="flex items-start gap-3">
-              <CheckCircle className="text-blue-600 mt-1" size={20} />
-              <p>
-                <span className="font-semibold">Gain Insights</span> to drive
-                smarter business growth.
-              </p>
-            </div>
-
-            {/* Button */}
-            <div className="pt-4">
-              <button className="px-6 py-3 bg-blue-600 text-white rounded-full font-medium hover:bg-blue-700 transition">
-                Learn More
-              </button>
-            </div>
-          </div>
-        </div>
+        <button
+          onClick={() => navigate("/login")}
+          className="px-8 py-4 bg-blue-600 text-white rounded-full cursor-pointer hover:bg-blue-700 transition font-semibold"
+        >
+          Get Started
+        </button>
       </section>
 
-      <section className="py-24 bg-[#eef1f4]">
-        <div className="max-w-4xl mx-auto text-center px-6 space-y-6">
-          <h1 className="text-4xl md:text-5xl font-bold leading-tight">
-            Ready to Transform Your Business with AI?
-          </h1>
-
-          <p className="text-lg text-[#0F172A]">
-            Start your journey to smarter decisions and powerful insights today.
-          </p>
-
-          <button className="mt-4 px-8 py-4 text-white bg-blue-600 hover:bg-blue-700 transition rounded-full text-lg font-semibold">
-            Get Started Now
-          </button>
-        </div>
-      </section>
       <Footer />
     </div>
   );

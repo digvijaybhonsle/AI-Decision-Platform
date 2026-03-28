@@ -13,11 +13,11 @@ import {
 import { useNavigate, useLocation } from "react-router-dom";
 
 const menuItems = [
-  { name: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { name: "Upload Dataset", icon: Upload, path: "/upload-dataset" },
   { name: "Train Model", icon: Cpu, path: "/train-model" },
   { name: "Predictions", icon: Brain, path: "/predict" },
   { name: "Scenario Simulator", icon: GitCompare, path: "/simulate" },
+  { name: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
   { name: "Insights", icon: Lightbulb, path: "/insights" },
 ];
 

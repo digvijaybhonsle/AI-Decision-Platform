@@ -33,13 +33,16 @@ const Navbar = () => {
         onClick={() => navigate("/")}
         className="flex items-center gap-2 text-xl font-semibold cursor-pointer"
       >
-        <div className="w-8 h-8 rounded-full bg-blue-500"></div>
-        <span>AI Decision</span>
+        <div className="flex items-center gap-3 text-xl font-semibold">
+          <div className="w-9 h-9 flex items-center justify-center rounded-lg bg-blue-500">
+            AI
+          </div>
+          <span>Decision</span>
+        </div>
       </div>
 
       {/* Desktop Menu */}
       <div className="hidden md:flex items-center gap-8 text-md font-medium">
-        
         {/* Dropdown */}
         <div
           className="relative"
@@ -66,7 +69,7 @@ const Navbar = () => {
         </div>
 
         <div
-          onClick={() => navigate("/how-it-works")}
+          onClick={() => navigate("/")}
           className={`cursor-pointer transition ${
             isActive("/how-it-works") ? "text-blue-400" : "hover:text-blue-400"
           }`}
@@ -75,7 +78,7 @@ const Navbar = () => {
         </div>
 
         <div
-          onClick={() => navigate("/pricing")}
+          onClick={() => navigate("/")}
           className={`cursor-pointer transition ${
             isActive("/pricing") ? "text-blue-400" : "hover:text-blue-400"
           }`}
@@ -84,7 +87,7 @@ const Navbar = () => {
         </div>
 
         <div
-          onClick={() => navigate("/about")}
+          onClick={() => navigate("/")}
           className={`cursor-pointer transition ${
             isActive("/about") ? "text-blue-400" : "hover:text-blue-400"
           }`}
@@ -97,14 +100,14 @@ const Navbar = () => {
       <div className="hidden md:flex items-center gap-4">
         <button
           onClick={() => navigate("/login")}
-          className="px-4 py-2 rounded-full border border-blue-400 text-blue-300 hover:bg-blue-500 hover:text-white transition"
+          className="px-4 py-2 rounded-full border border-blue-400 cursor-pointer text-blue-300 hover:bg-blue-500 hover:text-white transition"
         >
           Login
         </button>
 
         <button
           onClick={() => navigate("/signup")}
-          className="px-5 py-2 rounded-full bg-blue-500 hover:bg-blue-600 text-white transition font-medium"
+          className="px-5 py-2 rounded-full bg-blue-500 cursor-pointer hover:bg-blue-600 text-white transition font-medium"
         >
           Get Started
         </button>
@@ -130,12 +133,14 @@ const Navbar = () => {
       {/* Mobile Menu */}
       {menuOpen && (
         <div className="absolute top-full left-0 w-full bg-[#0F172A] px-6 py-6 flex flex-col gap-4 md:hidden shadow-lg">
-          
           <div className="font-medium">Features</div>
           <div className="ml-3 text-sm text-gray-300">AI Insights</div>
           <div className="ml-3 text-sm text-gray-300">Analytics</div>
 
-          <div onClick={() => navigate("/how-it-works")} className="cursor-pointer">
+          <div
+            onClick={() => navigate("/how-it-works")}
+            className="cursor-pointer"
+          >
             How It Works
           </div>
 
@@ -149,14 +154,14 @@ const Navbar = () => {
 
           <button
             onClick={() => navigate("/login")}
-            className="mt-4 px-4 py-2 rounded-full border border-blue-400 text-blue-300"
+            className="mt-4 px-4 py-2 rounded-full border cursor-pointer border-blue-400 text-blue-300"
           >
             Login
           </button>
 
           <button
             onClick={() => navigate("/signup")}
-            className="px-5 py-2 rounded-full bg-blue-500 text-white"
+            className="px-5 py-2 rounded-full bg-blue-500 cursor-pointer text-white"
           >
             Get Started
           </button>

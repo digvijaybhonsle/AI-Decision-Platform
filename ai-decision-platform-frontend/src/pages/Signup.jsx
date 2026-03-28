@@ -178,7 +178,7 @@ const Signup = () => {
               />
 
               <div
-                className="cursor-pointer"
+                className="cursor-pointer text-gray-400"
                 onClick={() => setShowPassword(!showPassword)}
               >
                 {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}

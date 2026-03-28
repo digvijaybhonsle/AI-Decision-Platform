@@ -1,8 +1,11 @@
 import React, { useState, useEffect } from "react";
 import api from "../utils/api";
+import { useNavigate } from "react-router-dom";
 import { Lightbulb, TrendingUp, BarChart3 } from "lucide-react";
 
 const Insights = () => {
+  const navigate = useNavigate();
+
   const [datasets, setDatasets] = useState([]);
   const [datasetId, setDatasetId] = useState("");
   const [data, setData] = useState(null);
@@ -45,7 +48,7 @@ const Insights = () => {
         const res = await api.post(`/api/insights/${datasetId}`);
         const ml = res.data.mlResponse;
 
-        // ❌ handle ML error case
+        // ❌ MODEL NOT TRAINED / ERROR
         if (ml?.insights?.error) {
           throw new Error(ml.insights.error);
         }
@@ -64,24 +67,88 @@ const Insights = () => {
   }, [datasetId]);
 
   // ============================
-  // STATES
+  // UI STATES
   // ============================
-  if (loading) return <div>Generating insights...</div>;
-  if (error) return <div className="text-red-500">{error}</div>;
-  if (!data) return <div>Select dataset</div>;
 
+  // ⏳ Loading
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-600">Generating insights...</p>
+      </div>
+    );
+  }
+
+  // ❌ No Dataset Found
+  if (!datasets || datasets.length === 0) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-center space-y-4 px-4">
+        <h2 className="text-xl font-semibold text-gray-700">
+          No Dataset Found
+        </h2>
+
+        <p className="text-gray-500">
+          Please upload and train a dataset first to view insights.
+        </p>
+
+        <button
+          onClick={() => navigate("/upload")}
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
+          Upload Dataset
+        </button>
+      </div>
+    );
+  }
+
+  // ❌ Model Not Trained
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center text-center space-y-4 px-4">
+        <h2 className="text-xl font-semibold text-red-500">
+          Model Not Ready
+        </h2>
+
+        <p className="text-gray-500">
+          Please train your dataset before generating insights.
+        </p>
+
+        <button
+          onClick={() => navigate("/train")}
+          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+        >
+          Train Model
+        </button>
+      </div>
+    );
+  }
+
+  // 📭 No Data Selected Yet
+  if (!data) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-gray-500">Select a dataset</p>
+      </div>
+    );
+  }
+
+  // ============================
+  // DATA
+  // ============================
   const summary = data.summary || {};
   const distribution = data.distribution || {};
   const recommendations = data.recommendations || [];
 
-  // convert distribution → array
   const features = Object.entries(distribution).map(([name, value]) => ({
     name,
     value,
   }));
 
+  // ============================
+  // UI
+  // ============================
   return (
-    <div className="min-h-screen space-y-8">
+    <div className="min-h-screen space-y-8 p-4 md:p-6">
 
       {/* HEADER */}
       <div>
@@ -110,46 +177,14 @@ const Insights = () => {
         </select>
       </div>
 
-      {/* SUMMARY CARDS */}
-      <div className="grid md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-xl shadow-sm p-6 flex gap-4">
-          <div className="bg-blue-100 p-3 rounded-lg">
-            <Lightbulb className="text-blue-600" size={20} />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Average</p>
-            <h3 className="text-xl font-semibold">
-              {summary.avg_target?.toFixed?.(2) || "-"}
-            </h3>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-6 flex gap-4">
-          <div className="bg-green-100 p-3 rounded-lg">
-            <TrendingUp className="text-green-600" size={20} />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Max</p>
-            <h3 className="text-xl font-semibold">
-              {summary.max_target ?? "-"}
-            </h3>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm p-6 flex gap-4">
-          <div className="bg-purple-100 p-3 rounded-lg">
-            <BarChart3 className="text-purple-600" size={20} />
-          </div>
-          <div>
-            <p className="text-sm text-gray-500">Min</p>
-            <h3 className="text-xl font-semibold">
-              {summary.min_target ?? "-"}
-            </h3>
-          </div>
-        </div>
+      {/* SUMMARY */}
+      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+        <Card icon={<Lightbulb />} label="Average" value={summary.avg_target?.toFixed?.(2)} color="blue" />
+        <Card icon={<TrendingUp />} label="Max" value={summary.max_target} color="green" />
+        <Card icon={<BarChart3 />} label="Min" value={summary.min_target} color="purple" />
       </div>
 
-      {/* FEATURE DISTRIBUTION */}
+      {/* DISTRIBUTION */}
       <div className="bg-white rounded-xl shadow-sm p-6">
         <h3 className="text-lg font-semibold mb-4">
           Feature Distribution
@@ -160,7 +195,7 @@ const Insights = () => {
             <div key={i}>
               <div className="flex justify-between text-sm mb-1">
                 <span>{f.name}</span>
-                <span>{f.value.toFixed?.(2) || f.value}</span>
+                <span>{f.value?.toFixed?.(2) || f.value}</span>
               </div>
 
               <div className="w-full bg-gray-200 rounded-full h-2">
@@ -194,6 +229,29 @@ const Insights = () => {
         )}
       </div>
 
+    </div>
+  );
+};
+
+// 🔹 Reusable Card Component
+const Card = ({ icon, label, value, color }) => {
+  const bgMap = {
+    blue: "bg-blue-100 text-blue-600",
+    green: "bg-green-100 text-green-600",
+    purple: "bg-purple-100 text-purple-600",
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm p-6 flex gap-4 items-center">
+      <div className={`p-3 rounded-lg ${bgMap[color]}`}>
+        {icon}
+      </div>
+      <div>
+        <p className="text-sm text-gray-500">{label}</p>
+        <h3 className="text-xl font-semibold">
+          {value ?? "-"}
+        </h3>
+      </div>
     </div>
   );
 };

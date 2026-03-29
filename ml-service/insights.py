@@ -1,128 +1,110 @@
 import pandas as pd
-import os
-
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATASET_PATH = os.path.join(BASE_DIR, "datasets")
+import numpy as np
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
 
 
 def generate_insights_from_df(df):
     try:
         # =========================
-        # 🧹 CLEAN DATA
+        # CLEAN DATA
         # =========================
         df = df.copy()
         df.columns = df.columns.str.strip()
 
-        # convert possible numeric strings
         for col in df.columns:
             df[col] = pd.to_numeric(df[col], errors="coerce")
 
         df = df.dropna()
 
-        # =========================
-        # 🔢 Numeric Columns
-        # =========================
         numeric_cols = df.select_dtypes(include=["number"]).columns.tolist()
 
         if len(numeric_cols) < 2:
-            return {"error": "Not enough numeric data for insights"}
+            return {"error": "Not enough numeric data"}
 
         # =========================
-        # 💰 Detect Spending Columns (SMARTER)
+        # TARGET SELECTION
         # =========================
-        spending_cols = [
-            col for col in numeric_cols
-            if any(k in col.lower() for k in ["mnt", "spend", "amount", "price"])
-        ]
+        variances = df[numeric_cols].var()
+        target_col = variances.idxmax()
+
+        X = df.drop(columns=[target_col])
+        y = df[target_col]
 
         # =========================
-        # 🎯 Target Selection (SMART)
+        # MODEL TRAINING
         # =========================
-        if spending_cols:
-            df["Total_Spending"] = df[spending_cols].sum(axis=1)
-            target_col = "Total_Spending"
-
-        elif "income" in [c.lower() for c in numeric_cols]:
-            target_col = next(c for c in numeric_cols if c.lower() == "income")
-
-        else:
-            # fallback → highest variance column
-            variances = df[numeric_cols].var()
-            target_col = variances.idxmax()
+        model = RandomForestRegressor(n_estimators=100, random_state=42)
+        model.fit(X, y)
 
         # =========================
-        # 📊 Summary
+        # FEATURE IMPORTANCE
+        # =========================
+        importance = model.feature_importances_
+        feature_importance = dict(zip(X.columns, importance))
+
+        # sort
+        feature_importance = dict(
+            sorted(feature_importance.items(), key=lambda x: x[1], reverse=True)
+        )
+
+        # =========================
+        # CORRELATION
+        # =========================
+        corr = df.corr()[target_col].drop(target_col)
+        correlation = corr.to_dict()
+
+        # =========================
+        # SUMMARY
         # =========================
         summary = {
-            "columns_analyzed": numeric_cols,
-            "target_used": target_col,
-            "avg_target": float(df[target_col].mean()),
-            "max_target": float(df[target_col].max()),
-            "min_target": float(df[target_col].min()),
+            "target": target_col,
+            "mean": float(y.mean()),
+            "max": float(y.max()),
+            "min": float(y.min()),
         }
 
         # =========================
-        # 📈 Trend (BETTER)
+        # TREND
         # =========================
-        # choose x column intelligently
-        x_col = None
-        for col in numeric_cols:
-            if col != target_col:
-                x_col = col
-                break
+        trend_col = X.columns[0]
 
         trend = (
-            df[[x_col, target_col]]
-            .sort_values(by=x_col)
-            .groupby(x_col)[target_col]
+            df[[trend_col, target_col]]
+            .sort_values(by=trend_col)
+            .groupby(trend_col)[target_col]
             .mean()
             .reset_index()
             .head(20)
+            .to_dict(orient="records")
         )
 
-        trend_data = trend.to_dict(orient="records")
-
         # =========================
-        # 📊 Distribution (NORMALIZED)
-        # =========================
-        distribution_raw = df[numeric_cols].sum()
-
-        # normalize to % (better UI)
-        total = distribution_raw.sum()
-        distribution = {
-            col: float((val / total) * 100) if total != 0 else 0
-            for col, val in distribution_raw.items()
-        }
-
-        # =========================
-        # 💡 Recommendations (SMARTER)
+        # ML-BASED RECOMMENDATIONS
         # =========================
         recommendations = []
 
-        mean_val = df[target_col].mean()
-        median_val = df[target_col].median()
-        std_val = df[target_col].std()
+        top_feature = list(feature_importance.keys())[0]
 
-        if mean_val < median_val:
-            recommendations.append("Performance is skewed — improve consistency")
+        recommendations.append(
+            f"'{top_feature}' has the highest impact on {target_col}"
+        )
 
-        if std_val > mean_val * 0.5:
-            recommendations.append("High variability detected — stabilize operations")
+        high_corr = max(correlation, key=lambda k: abs(correlation[k]))
+        recommendations.append(
+            f"'{high_corr}' is strongly correlated with {target_col}"
+        )
 
-        if spending_cols:
-            top_spend = max(spending_cols, key=lambda c: df[c].mean())
-            recommendations.append(f"Focus more on {top_spend} category")
+        if y.std() > y.mean() * 0.5:
+            recommendations.append("High variance detected — stabilize inputs")
 
-        if mean_val > 0 and std_val < mean_val * 0.2:
-            recommendations.append("Stable growth observed — scale strategy")
-
-        if not recommendations:
-            recommendations.append("Data looks stable — maintain current strategy")
+        recommendations.append("Focus on optimizing top features to improve outcome")
 
         return {
             "summary": summary,
-            "trend": trend_data,
-            "distribution": distribution,
+            "trend": trend,
+            "feature_importance": feature_importance,
+            "correlation": correlation,
             "recommendations": recommendations,
         }
 

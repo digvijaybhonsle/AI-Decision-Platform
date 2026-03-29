@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Brain, PlayCircle, Database, AlertCircle } from "lucide-react";
+import { Brain, PlayCircle, Database, AlertCircle, Sparkles } from "lucide-react";
 import api from "../utils/api";
 
 const Prediction = () => {
@@ -9,27 +9,24 @@ const Prediction = () => {
   const [formData, setFormData] = useState({});
 
   const [result, setResult] = useState(null);
+  const [mlResponse, setMlResponse] = useState(null);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [mlResponse, setMlResponse] = useState(null);
 
   // ============================
   // FETCH DATASETS
   // ============================
   useEffect(() => {
     const fetchDatasets = async () => {
-      try {
-        const res = await api.get("/api/dataset");
-        setDatasets(res.data.data || res.data || []);
-      } catch (err) {
-        console.error("Failed to fetch datasets:", err);
-      }
+      const res = await api.get("/api/dataset");
+      setDatasets(res.data.data || []);
     };
     fetchDatasets();
   }, []);
 
   // ============================
-  // DATASET CHANGE
+  // DATASET SELECT
   // ============================
   const handleDatasetChange = async (id) => {
     setDatasetId(id);
@@ -38,64 +35,36 @@ const Prediction = () => {
     setMlResponse(null);
 
     try {
-      // 🔥 CALL BACKEND TO GET FEATURES
       const res = await api.get(`/api/predictions/features/${id}`);
-
       const features = res.data.features || [];
-
-      console.log("🎯 Features from backend:", features);
 
       setFeatureColumns(features);
 
-      // Initialize form dynamically
-      const initialForm = {};
-      features.forEach((f) => {
-        initialForm[f] = "";
-      });
+      const initial = {};
+      features.forEach((f) => (initial[f] = ""));
+      setFormData(initial);
 
-      setFormData(initialForm);
-    } catch (err) {
-      console.error("❌ Failed to fetch features:", err);
-      setError("Failed to load model features");
+    } catch {
+      setError("Model not trained for this dataset");
     }
   };
 
   // ============================
-  // INPUT CHANGE
+  // INPUT
   // ============================
   const handleChange = (e) => {
     const { name, value } = e.target;
-
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  // ============================
-  // 🔥 CLEAN INPUT (IMPROVED)
-  // ============================
-  const cleanInputData = () => {
+  const cleanInput = () => {
     const cleaned = {};
-
-    Object.keys(formData).forEach((key) => {
-      let val = formData[key];
-
-      if (val === null || val === undefined) return;
-
-      if (typeof val === "string") {
-        val = val.trim();
-      }
-
-      if (val === "") return;
-
-      if (!isNaN(Number(val))) {
-        val = Number(val);
-      }
-
-      cleaned[key] = val;
+    Object.keys(formData).forEach((k) => {
+      let v = formData[k]?.trim();
+      if (!v) return;
+      if (!isNaN(v)) v = Number(v);
+      cleaned[k] = v;
     });
-
     return cleaned;
   };
 
@@ -103,105 +72,65 @@ const Prediction = () => {
   // PREDICT
   // ============================
   const handlePredict = async () => {
-    if (!datasetId) {
-      setError("Please select a dataset first");
-      return;
-    }
+    if (!datasetId) return setError("Select dataset first");
 
-    const emptyFields = Object.keys(formData).filter(
-      (key) => !formData[key] || formData[key].toString().trim() === "",
-    );
-
-    if (emptyFields.length > 0) {
-      setError(`Please fill all fields: ${emptyFields.join(", ")}`);
-      return;
-    }
+    const empty = Object.keys(formData).filter((k) => !formData[k]);
+    if (empty.length) return setError(`Fill: ${empty.join(", ")}`);
 
     try {
       setLoading(true);
       setError("");
-      setResult(null);
-      setMlResponse(null);
-
-      const cleanedInput = cleanInputData();
-
-      console.log("🚀 Sending Input:", cleanedInput);
 
       const res = await api.post("/api/predictions/run", {
         datasetId,
-        inputValues: cleanedInput,
+        inputValues: cleanInput(),
       });
 
-      console.log("📡 Backend Response:", res.data);
+      const data = res.data.prediction;
+      setResult(data.predictedValue);
+      setMlResponse(data);
 
-      const predictionData = res.data.prediction || {};
-      setResult(predictionData.predictedValue ?? null);
-      setMlResponse(predictionData);
-
-      // 🔥 UPDATE FEATURES FROM BACKEND (BEST FIX)
-      if (res.data.features) {
-        setFeatureColumns(res.data.features);
-      }
-
-      setResult(predictionData.predictedValue ?? null);
-
-      setMlResponse(predictionData);
     } catch (err) {
-      console.error("❌ Prediction Error:", err);
-
-      const errorMsg =
-        err.response?.data?.error?.message ||
-        err.response?.data?.error ||
-        err.response?.data?.detail ||
-        err.response?.data?.message ||
-        err.message ||
-        "Failed to generate prediction";
-
-      setError(errorMsg);
+      setError(err.response?.data?.message || "Prediction failed");
     } finally {
       setLoading(false);
     }
   };
 
-  // ============================
-  // UI
-  // ============================
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
+
       {/* HEADER */}
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Brain className="text-blue-600" />
-          Make Prediction
+          Prediction Engine
         </h1>
-        <p className="text-sm text-gray-500">
-          Use your trained model to generate predictions
+        <p className="text-gray-500 text-sm">
+          Generate predictions using trained ML models
         </p>
       </div>
 
       {/* ERROR */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl flex items-start gap-3">
-          <AlertCircle size={20} />
-          <div>{error}</div>
+        <div className="flex gap-3 p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl">
+          <AlertCircle />
+          {error}
         </div>
       )}
 
-      {/* DATASET SELECT */}
+      {/* STEP 1: DATASET */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border">
-        <label className="block text-sm font-medium mb-2">Select Dataset</label>
+        <h2 className="font-semibold mb-3">Step 1: Select Dataset</h2>
 
         <div className="relative">
-          <Database
-            className="absolute left-3 top-3.5 text-gray-400"
-            size={18}
-          />
+          <Database className="absolute left-3 top-3.5 text-gray-400" />
           <select
             value={datasetId}
             onChange={(e) => handleDatasetChange(e.target.value)}
-            className="w-full pl-10 pr-4 py-3 border rounded-xl"
+            className="w-full pl-10 py-3 border rounded-xl"
           >
-            <option value="">-- Choose a dataset --</option>
+            <option value="">Choose dataset</option>
             {datasets.map((d) => (
               <option key={d._id} value={d._id}>
                 {d.datasetName}
@@ -211,57 +140,67 @@ const Prediction = () => {
         </div>
       </div>
 
-      {/* INPUT FIELDS */}
+      {/* STEP 2: INPUT */}
       {featureColumns.length > 0 && (
         <div className="bg-white p-6 rounded-2xl shadow-sm border">
-          <h2 className="text-lg font-semibold mb-4">Input Features</h2>
+          <h2 className="font-semibold mb-4">Step 2: Enter Features</h2>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4">
             {featureColumns.map((col) => (
-              <div key={col}>
-                <label className="text-sm text-gray-600">{col}</label>
-                <input
-                  type="text"
-                  name={col}
-                  value={formData[col] || ""}
-                  onChange={handleChange}
-                  placeholder={`Enter ${col}`}
-                  className="w-full px-4 py-3 border rounded-xl text-sm"
-                />
-              </div>
+              <input
+                key={col}
+                name={col}
+                value={formData[col] || ""}
+                onChange={handleChange}
+                placeholder={col}
+                className="px-4 py-3 border rounded-xl text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              />
             ))}
           </div>
 
           <button
             onClick={handlePredict}
-            disabled={loading}
-            className="mt-8 w-full bg-blue-600 text-white py-3 rounded-xl"
+            className="mt-6 w-full bg-blue-600 text-white py-3 rounded-xl cursor-pointer flex justify-center items-center gap-2"
           >
-            {loading ? "Generating..." : "Generate Prediction"}
+            {loading ? "Generating..." : <><PlayCircle /> Generate Prediction</>}
           </button>
         </div>
       )}
 
       {/* RESULT */}
       {result !== null && (
-        <div className="bg-blue-50 p-6 rounded-xl">
-          <h2 className="text-xl font-bold">
-            Prediction:{" "}
-            {typeof result === "number" ? result.toFixed(4) : result}
+        <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-2xl border">
+          <h2 className="font-semibold mb-2 flex items-center gap-2">
+            <Sparkles className="text-blue-600" />
+            Prediction Result
           </h2>
 
-          {mlResponse?.confidence !== undefined && (
-            <p>Confidence: {(mlResponse.confidence * 100).toFixed(2)}%</p>
+          <p className="text-3xl font-bold text-blue-700">
+            {typeof result === "number" ? result.toFixed(4) : result}
+          </p>
+
+          {mlResponse?.confidence && (
+            <p className="text-sm text-gray-600 mt-2">
+              Confidence: {(mlResponse.confidence * 100).toFixed(2)}%
+            </p>
           )}
 
           {mlResponse?.range && (
-            <p>
+            <p className="text-sm text-gray-600">
               Range: {mlResponse.range.min.toFixed(2)} -{" "}
               {mlResponse.range.max.toFixed(2)}
             </p>
           )}
         </div>
       )}
+
+      {/* EMPTY STATE */}
+      {!datasetId && (
+        <div className="text-center text-gray-400 py-10">
+          Select a dataset to begin prediction
+        </div>
+      )}
+
     </div>
   );
 };

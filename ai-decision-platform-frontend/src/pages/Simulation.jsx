@@ -5,31 +5,35 @@ import {
   TrendingUp,
   Database,
   AlertCircle,
+  Plus,
+  Trash2,
 } from "lucide-react";
 import api from "../utils/api";
 
 const Simulation = () => {
   const [datasetId, setDatasetId] = useState("");
   const [features, setFeatures] = useState([]);
-  const [formData, setFormData] = useState({});
+  const [scenarios, setScenarios] = useState([]);
   const [results, setResults] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [datasets, setDatasets] = useState([]);
 
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // ============================
+  // FETCH DATASETS
+  // ============================
   useEffect(() => {
     const fetchDatasets = async () => {
-      try {
-        const res = await api.get("/api/dataset");
-        setDatasets(res.data.data || res.data || []);
-      } catch (err) {
-        console.error("Failed to fetch datasets:", err);
-      }
+      const res = await api.get("/api/dataset");
+      setDatasets(res.data.data || []);
     };
-
     fetchDatasets();
   }, []);
 
+  // ============================
+  // LOAD FEATURES
+  // ============================
   const loadFeatures = async (id) => {
     try {
       setError("");
@@ -38,215 +42,215 @@ const Simulation = () => {
 
       setFeatures(feats);
 
+      // create first scenario
       const initial = {};
       feats.forEach((f) => (initial[f] = ""));
-      setFormData(initial);
-    } catch (err) {
-      console.error(err);
-      setError("Failed to load features");
+
+      setScenarios([initial]);
+
+    } catch {
+      setError("Model not trained for this dataset");
     }
   };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
+  // ============================
+  // HANDLE CHANGE
+  // ============================
+  const handleChange = (index, name, value) => {
+    const updated = [...scenarios];
+    updated[index][name] = value;
+    setScenarios(updated);
+  };
+
+  // ============================
+  // ADD SCENARIO
+  // ============================
+  const addScenario = () => {
+    const newScenario = {};
+    features.forEach((f) => (newScenario[f] = ""));
+    setScenarios([...scenarios, newScenario]);
+  };
+
+  // ============================
+  // REMOVE SCENARIO
+  // ============================
+  const removeScenario = (index) => {
+    const updated = scenarios.filter((_, i) => i !== index);
+    setScenarios(updated);
+  };
+
+  // ============================
+  // CLEAN INPUT
+  // ============================
+  const cleanData = (scenario) => {
+    const cleaned = {};
+
+    Object.keys(scenario).forEach((k) => {
+      let v = scenario[k];
+      if (!v) return;
+
+      if (typeof v === "string") v = v.trim();
+      if (!isNaN(v)) v = Number(v);
+
+      cleaned[k] = v;
     });
+
+    return cleaned;
   };
 
   // ============================
   // RUN SIMULATION
   // ============================
   const runSimulation = async () => {
-    if (!datasetId) {
-      setError("Please select a dataset");
-      return;
-    }
+    if (!datasetId) return setError("Select dataset first");
 
     try {
       setLoading(true);
       setError("");
-      setResults([]);
 
-      const cleaned = {};
-
-      Object.keys(formData).forEach((k) => {
-        let val = formData[k];
-
-        if (val === "" || val === null) return;
-
-        if (typeof val === "string") val = val.trim();
-        if (!isNaN(Number(val))) val = Number(val);
-
-        cleaned[k] = val;
-      });
-
-      // 🔥 prevent empty input
-      if (Object.keys(cleaned).length === 0) {
-        setError("Please fill at least one input field");
-        setLoading(false);
-        return;
-      }
-
-      console.log("🚀 Simulation Input:", cleaned);
+      const cleanedInputs = scenarios.map(cleanData);
 
       const res = await api.post("/api/simulations/run", {
         datasetId,
-        inputs: [cleaned],
+        inputs: cleanedInputs,
       });
 
-      console.log("📊 Simulation Response:", res.data);
-
-      // 🔥 USE ML RESPONSE DIRECTLY
       const mlResults = res.data.mlResponse?.results || [];
 
-      if (!mlResults.length) {
-        setError("No simulation results returned");
-        return;
-      }
-
       setResults(mlResults);
+
     } catch (err) {
-      console.error("❌ Simulation Error:", err);
-
-      const msg =
-        err.response?.data?.message ||
-        err.response?.data?.error?.message ||
-        err.response?.data?.error ||
-        "Simulation failed";
-
-      setError(msg);
+      setError("Simulation failed");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 p-4 md:p-6">
+
       {/* HEADER */}
       <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
+        <h1 className="text-2xl font-bold flex gap-2 items-center">
           <SlidersHorizontal className="text-blue-600" />
-          Scenario Simulation
+          Scenario Simulator
         </h1>
-        <p className="text-sm text-gray-500">
-          Run what-if simulations using your trained model
+        <p className="text-gray-500 text-sm">
+          Compare multiple business scenarios using AI
         </p>
       </div>
 
       {/* ERROR */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-600 p-4 rounded-xl flex gap-3">
-          <AlertCircle size={20} />
-          <div>{error}</div>
+        <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex gap-2 text-red-600">
+          <AlertCircle /> {error}
         </div>
       )}
 
-      {/* DATASET INPUT */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border">
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Select Dataset
-        </label>
+      {/* DATASET */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border">
+        <label className="text-sm mb-2 block">Select Dataset</label>
 
-        <div className="relative">
-          <Database
-            className="absolute left-3 top-3.5 text-gray-400"
-            size={18}
-          />
-
-          <select
-            value={datasetId}
-            onChange={(e) => {
-              const id = e.target.value;
-              setDatasetId(id);
-              loadFeatures(id);
-            }}
-            className="w-full pl-10 pr-4 py-3 border rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="">-- Choose a dataset --</option>
-
-            {datasets.map((d) => (
-              <option key={d._id} value={d._id}>
-                {d.datasetName}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={datasetId}
+          onChange={(e) => {
+            const id = e.target.value;
+            setDatasetId(id);
+            loadFeatures(id);
+          }}
+          className="w-full border px-4 py-3 rounded-xl"
+        >
+          <option value="">Choose dataset</option>
+          {datasets.map((d) => (
+            <option key={d._id} value={d._id}>
+              {d.datasetName}
+            </option>
+          ))}
+        </select>
       </div>
 
-      {/* INPUT FEATURES */}
+      {/* SCENARIOS */}
       {features.length > 0 && (
-        <div className="bg-white p-6 rounded-2xl shadow-sm border">
-          <h2 className="text-lg font-semibold mb-4">Simulation Inputs</h2>
+        <div className="space-y-6">
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {features.map((f) => (
-              <div key={f}>
-                <label className="text-sm text-gray-600 mb-1 block">{f}</label>
-                <input
-                  name={f}
-                  value={formData[f] || ""}
-                  onChange={handleChange}
-                  placeholder={`Enter ${f}`}
-                  className="w-full px-4 py-3 border rounded-xl text-sm"
-                />
+          {scenarios.map((scenario, index) => (
+            <div
+              key={index}
+              className="bg-white p-6 rounded-xl border shadow-sm"
+            >
+              <div className="flex justify-between mb-4">
+                <h3 className="font-semibold">
+                  Scenario {index + 1}
+                </h3>
+
+                {scenarios.length > 1 && (
+                  <button
+                    onClick={() => removeScenario(index)}
+                    className="text-red-500"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
               </div>
-            ))}
-          </div>
 
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {features.map((f) => (
+                  <input
+                    key={f}
+                    placeholder={f}
+                    value={scenario[f] || ""}
+                    onChange={(e) =>
+                      handleChange(index, f, e.target.value)
+                    }
+                    className="px-4 py-3 border rounded-xl"
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* ADD BUTTON */}
+          <button
+            onClick={addScenario}
+            className="flex items-center gap-2 text-blue-600"
+          >
+            <Plus /> Add Scenario
+          </button>
+
+          {/* RUN BUTTON */}
           <button
             onClick={runSimulation}
-            disabled={loading}
-            className="mt-8 w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl"
+            className="w-full bg-blue-600 text-white py-3 rounded-xl cursor-pointer flex items-center justify-center gap-2"
           >
-            <PlayCircle size={20} />
-            {loading ? "Running Simulation..." : "Run Simulation"}
+            <PlayCircle />
+            {loading ? "Running..." : "Run Simulation"}
           </button>
         </div>
       )}
 
       {/* RESULTS */}
       {results.length > 0 && (
-        <div className="space-y-4">
+        <div className="grid md:grid-cols-2 gap-4">
           {results.map((r, i) => (
-            <div
-              key={i}
-              className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-100 p-6 rounded-2xl flex items-center gap-4"
-            >
-              <div className="bg-white p-3 rounded-xl shadow">
-                <TrendingUp className="text-green-600" size={28} />
-              </div>
+            <div key={i} className="bg-green-50 p-6 rounded-xl border">
+              <h3 className="font-semibold mb-2">
+                Scenario {i + 1}
+              </h3>
 
-              <div>
-                <p className="text-sm text-gray-500">Prediction</p>
+              <p className="text-2xl font-bold">
+                {r.prediction?.toFixed(2)}
+              </p>
 
-                <h2 className="text-2xl font-bold text-gray-900">
-                  {r.prediction?.toFixed(2)}
-                </h2>
-
-                {r.confidence !== undefined && (
-                  <p className="text-md text-gray-800 mt-1">
-                    Confidence: {(r.confidence * 100).toFixed(1)}%
-                  </p>
-                )}
-
-                {r.range && (
-                  <p className="text-xs text-gray-400">
-                    Range: {r.range.min.toFixed(0)} - {r.range.max.toFixed(0)}
-                  </p>
-                )}
-              </div>
+              {r.confidence && (
+                <p className="text-sm">
+                  Confidence: {(r.confidence * 100).toFixed(1)}%
+                </p>
+              )}
             </div>
           ))}
         </div>
       )}
 
-      {/* EMPTY STATE */}
-      {!features.length && (
-        <div className="text-center py-10 text-gray-400">
-          Enter dataset ID to load simulation inputs
-        </div>
-      )}
     </div>
   );
 };

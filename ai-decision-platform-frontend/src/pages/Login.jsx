@@ -61,7 +61,7 @@ const Login = () => {
       localStorage.setItem("token", token);
       localStorage.setItem("user", JSON.stringify(user));
 
-      navigate("/dashboard");
+      navigate("/upload-dataset");
     } catch (error) {
       console.error(error);
 

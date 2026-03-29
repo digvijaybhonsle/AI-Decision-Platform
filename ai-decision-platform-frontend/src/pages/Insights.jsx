@@ -1,7 +1,21 @@
 import React, { useState, useEffect } from "react";
 import api from "../utils/api";
 import { useNavigate } from "react-router-dom";
-import { Lightbulb, TrendingUp, BarChart3 } from "lucide-react";
+import {
+  Lightbulb,
+  TrendingUp,
+  BarChart3,
+} from "lucide-react";
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  BarChart,
+  Bar,
+} from "recharts";
 
 const Insights = () => {
   const navigate = useNavigate();
@@ -17,20 +31,11 @@ const Insights = () => {
   // ============================
   useEffect(() => {
     const fetchDatasets = async () => {
-      try {
-        const res = await api.get("/api/dataset");
-        const ds = res.data.data || res.data || [];
-
-        setDatasets(ds);
-
-        if (ds.length > 0) {
-          setDatasetId(ds[0]._id);
-        }
-      } catch (err) {
-        console.error(err);
-      }
+      const res = await api.get("/api/dataset");
+      const ds = res.data.data || [];
+      setDatasets(ds);
+      if (ds.length > 0) setDatasetId(ds[0]._id);
     };
-
     fetchDatasets();
   }, []);
 
@@ -48,16 +53,12 @@ const Insights = () => {
         const res = await api.post(`/api/insights/${datasetId}`);
         const ml = res.data.mlResponse;
 
-        // ❌ MODEL NOT TRAINED / ERROR
-        if (ml?.insights?.error) {
-          throw new Error(ml.insights.error);
-        }
+        if (ml?.insights?.error) throw new Error(ml.insights.error);
 
         setData(ml.insights);
 
       } catch (err) {
-        console.error(err);
-        setError(err.message || "Failed to load insights");
+        setError(err.message || "Failed");
       } finally {
         setLoading(false);
       }
@@ -67,193 +68,170 @@ const Insights = () => {
   }, [datasetId]);
 
   // ============================
-  // UI STATES
+  // STATES
   // ============================
-
-  // ⏳ Loading
   if (loading) {
+    return <Center msg="Generating AI insights..." />;
+  }
+
+  if (!datasets.length) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-600">Generating insights...</p>
-      </div>
+      <Center
+        msg="No Dataset Found"
+        btn="Upload Dataset"
+        action={() => navigate("/upload")}
+      />
     );
   }
 
-  // ❌ No Dataset Found
-  if (!datasets || datasets.length === 0) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center space-y-4 px-4">
-        <h2 className="text-xl font-semibold text-gray-700">
-          No Dataset Found
-        </h2>
-
-        <p className="text-gray-500">
-          Please upload and train a dataset first to view insights.
-        </p>
-
-        <button
-          onClick={() => navigate("/upload")}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-        >
-          Upload Dataset
-        </button>
-      </div>
-    );
-  }
-
-  // ❌ Model Not Trained
   if (error) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center text-center space-y-4 px-4">
-        <h2 className="text-xl font-semibold text-red-500">
-          Model Not Ready
-        </h2>
-
-        <p className="text-gray-500">
-          Please train your dataset before generating insights.
-        </p>
-
-        <button
-          onClick={() => navigate("/train")}
-          className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-        >
-          Train Model
-        </button>
-      </div>
+      <Center
+        msg="Model not trained"
+        btn="Train Model"
+        action={() => navigate("/train")}
+      />
     );
   }
 
-  // 📭 No Data Selected Yet
-  if (!data) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-500">Select a dataset</p>
-      </div>
-    );
-  }
+  if (!data) return <Center msg="Select dataset" />;
 
   // ============================
   // DATA
   // ============================
   const summary = data.summary || {};
-  const distribution = data.distribution || {};
+  const trend = data.trend || [];
+  const importance = data.feature_importance || {};
+  const correlation = data.correlation || {};
   const recommendations = data.recommendations || [];
 
-  const features = Object.entries(distribution).map(([name, value]) => ({
-    name,
-    value,
+  const importanceData = Object.entries(importance).map(([k, v]) => ({
+    name: k,
+    value: v,
+  }));
+
+  const correlationData = Object.entries(correlation).map(([k, v]) => ({
+    name: k,
+    value: v,
   }));
 
   // ============================
   // UI
   // ============================
   return (
-    <div className="min-h-screen space-y-8 p-4 md:p-6">
+    <div className="space-y-8 p-4 md:p-6">
 
       {/* HEADER */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-800">Insights</h1>
-        <p className="text-sm text-gray-500">
-          AI-generated insights from your dataset
+        <h1 className="text-2xl font-bold">AI Insights</h1>
+        <p className="text-gray-500 text-sm">
+          ML-powered analytics & recommendations
         </p>
       </div>
 
-      {/* DATASET SELECT */}
-      <div className="bg-white p-4 rounded-xl shadow-sm">
-        <label className="text-sm text-gray-600 mb-2 block">
-          Select Dataset
-        </label>
-
-        <select
-          value={datasetId}
-          onChange={(e) => setDatasetId(e.target.value)}
-          className="w-full border px-4 py-2 rounded-lg"
-        >
-          {datasets.map((d) => (
-            <option key={d._id} value={d._id}>
-              {d.datasetName}
-            </option>
-          ))}
-        </select>
-      </div>
+      {/* DATASET */}
+      <select
+        value={datasetId}
+        onChange={(e) => setDatasetId(e.target.value)}
+        className="w-full border px-4 py-2 rounded-lg"
+      >
+        {datasets.map((d) => (
+          <option key={d._id} value={d._id}>
+            {d.datasetName}
+          </option>
+        ))}
+      </select>
 
       {/* SUMMARY */}
-      <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-        <Card icon={<Lightbulb />} label="Average" value={summary.avg_target?.toFixed?.(2)} color="blue" />
-        <Card icon={<TrendingUp />} label="Max" value={summary.max_target} color="green" />
-        <Card icon={<BarChart3 />} label="Min" value={summary.min_target} color="purple" />
+      <div className="grid md:grid-cols-3 gap-4">
+        <Card label="Average" value={summary.mean?.toFixed?.(2)} />
+        <Card label="Max" value={summary.max} />
+        <Card label="Min" value={summary.min} />
       </div>
 
-      {/* DISTRIBUTION */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold mb-4">
-          Feature Distribution
-        </h3>
+      {/* TREND */}
+      <div className="bg-white p-6 rounded-xl shadow">
+        <h3 className="font-semibold mb-4">Trend Analysis</h3>
 
-        <div className="space-y-4">
-          {features.map((f, i) => (
-            <div key={i}>
-              <div className="flex justify-between text-sm mb-1">
-                <span>{f.name}</span>
-                <span>{f.value?.toFixed?.(2) || f.value}</span>
-              </div>
+        <ResponsiveContainer width="100%" height={250}>
+          <LineChart data={trend}>
+            <XAxis dataKey={Object.keys(trend[0] || {})[0]} />
+            <YAxis />
+            <Tooltip />
+            <Line
+              dataKey={Object.keys(trend[0] || {})[1]}
+              stroke="#3B82F6"
+              strokeWidth={2}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
 
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div
-                  className="bg-blue-600 h-2 rounded-full"
-                  style={{ width: `${Math.min(f.value, 100)}%` }}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
+      {/* FEATURE IMPORTANCE */}
+      <div className="bg-white p-6 rounded-xl shadow">
+        <h3 className="font-semibold mb-4">Feature Importance</h3>
+
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={importanceData}>
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            <Bar dataKey="value" fill="#6366F1" />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* CORRELATION */}
+      <div className="bg-white p-6 rounded-xl shadow">
+        <h3 className="font-semibold mb-4">Correlation</h3>
+
+        <ResponsiveContainer width="100%" height={250}>
+          <BarChart data={correlationData}>
+            <XAxis dataKey="name" />
+            <YAxis />
+            <Tooltip />
+            <Bar dataKey="value" fill="#10B981" />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
 
       {/* RECOMMENDATIONS */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
-        <h3 className="text-lg font-semibold mb-4">
-          Recommendations
-        </h3>
+      <div className="bg-white p-6 rounded-xl shadow">
+        <h3 className="font-semibold mb-4">AI Recommendations</h3>
 
-        {recommendations.length > 0 ? (
-          recommendations.map((rec, i) => (
-            <div key={i} className="flex gap-3 mb-3">
-              <Lightbulb className="text-blue-600" />
-              <p className="text-sm text-gray-700">{rec}</p>
-            </div>
-          ))
-        ) : (
-          <p className="text-sm text-gray-500">
-            No recommendations available
-          </p>
-        )}
+        {recommendations.map((r, i) => (
+          <div key={i} className="flex gap-2 mb-2">
+            <Lightbulb className="text-blue-600" />
+            <p>{r}</p>
+          </div>
+        ))}
       </div>
 
     </div>
   );
 };
 
-// 🔹 Reusable Card Component
-const Card = ({ icon, label, value, color }) => {
-  const bgMap = {
-    blue: "bg-blue-100 text-blue-600",
-    green: "bg-green-100 text-green-600",
-    purple: "bg-purple-100 text-purple-600",
-  };
+// 🔹 CARD
+const Card = ({ label, value }) => (
+  <div className="bg-white p-6 rounded-xl shadow">
+    <p className="text-sm text-gray-500">{label}</p>
+    <h2 className="text-xl font-bold">{value ?? "-"}</h2>
+  </div>
+);
 
-  return (
-    <div className="bg-white rounded-xl shadow-sm p-6 flex gap-4 items-center">
-      <div className={`p-3 rounded-lg ${bgMap[color]}`}>
-        {icon}
-      </div>
-      <div>
-        <p className="text-sm text-gray-500">{label}</p>
-        <h3 className="text-xl font-semibold">
-          {value ?? "-"}
-        </h3>
-      </div>
-    </div>
-  );
-};
+// 🔹 CENTER UI
+const Center = ({ msg, btn, action }) => (
+  <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+    <p className="text-gray-500">{msg}</p>
+    {btn && (
+      <button
+        onClick={action}
+        className="px-6 py-2 bg-blue-600 text-white rounded-lg"
+      >
+        {btn}
+      </button>
+    )}
+  </div>
+);
 
 export default Insights;

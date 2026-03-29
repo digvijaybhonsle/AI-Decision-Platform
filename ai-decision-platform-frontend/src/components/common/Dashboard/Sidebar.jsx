@@ -17,8 +17,8 @@ const menuItems = [
   { name: "Train Model", icon: Cpu, path: "/train-model" },
   { name: "Predictions", icon: Brain, path: "/predict" },
   { name: "Scenario Simulator", icon: GitCompare, path: "/simulate" },
-  { name: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
-  { name: "Insights", icon: Lightbulb, path: "/insights" },
+  // { name: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
+  { name: "Insights Dashboard", icon: Lightbulb, path: "/insights" },
 ];
 
 const Sidebar = () => {
